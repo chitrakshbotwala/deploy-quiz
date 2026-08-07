@@ -5,6 +5,7 @@ import { env } from './env';
 import { verifyIdToken } from './firebase';
 import { publicQuestions, sectionById, STAGES, stageById } from './quiz';
 import { clientIp, take } from './ratelimit';
+import { emailConfigured, sendFinalistMail, spacing } from './email';
 import {
   adminBoards,
   clearCut,
@@ -16,6 +17,10 @@ import {
   openAttempt,
   participantOf,
   sectionStateIn,
+  cutSummaryOf,
+  markNotified,
+  notifyTargets,
+  resetNotifications,
   serveNext,
   startEvent,
   stopEvent,
@@ -24,6 +29,7 @@ import {
 } from './store';
 import { clearAdmin, clearSession, isAdmin, issueAdmin, issueSession, readUid } from './session';
 import type {
+  AdminNotifyResponse,
   AdminStagesResponse,
   ApiError,
   EventState,
@@ -435,6 +441,127 @@ api.post('/admin/cut/clear', async c => {
   if (!stage) return fail(c, 400, 'invalid-body', 'Which stage?');
   await clearCut(stage);
   return c.json({ ok: true });
+});
+
+/**
+ * Tell the people a cut kept, one batch at a time.
+ *
+ * Batched on purpose. A send is paced against EmailJS's rate limit, so seventy-five
+ * of them is about a minute of work, and a request held open for a minute is one a
+ * proxy will cut — leaving the organiser with no idea how far it got. The client
+ * calls this until `remaining` reaches zero, and because a recipient is marked only
+ * on success, every one of those calls is safe to repeat: a double-clicked button, a
+ * reloaded page, or a batch that died halfway cannot mail anyone twice, and a
+ * failure is simply picked up by the next batch.
+ *
+ * This is the only route in the app that does something to a person which cannot be
+ * undone, so it refuses to guess: no frozen cut, no send.
+ */
+api.post('/admin/notify', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  if (!emailConfigured()) {
+    return fail(
+      c,
+      503,
+      'email-not-configured',
+      'EmailJS is not configured on the server. Set the EMAILJS_* variables and restart.'
+    );
+  }
+
+  const body = (await c.req.json().catch(() => null)) as { stageId?: unknown; limit?: unknown } | null;
+  const stage = typeof body?.stageId === 'string' ? stageById(body.stageId) : null;
+  if (!stage) return fail(c, 400, 'invalid-body', 'Which stage?');
+  const limit = Math.min(Math.max(Number(body?.limit) || 8, 1), 25);
+
+  // One document, not the whole board — see the note on `cutSummaryOf`.
+  const { frozen, questionTotal } = await cutSummaryOf(stage);
+  if (!frozen) {
+    return fail(c, 409, 'no-cut', 'Freeze the cut first — there is no list of who got through yet.');
+  }
+
+  const { targets, remaining, total } = await notifyTargets(stage, limit);
+  const errors: { email: string; message: string }[] = [];
+  let sent = 0;
+
+  for (const [i, target] of targets.entries()) {
+    // Spaced, not parallel: EmailJS answers 429 above its rate limit, and a burst
+    // that trips it would mark nobody and look like a total failure.
+    if (i > 0) await spacing();
+    const result = await sendFinalistMail({
+      toEmail: target.email,
+      toName: target.name,
+      rank: target.rank,
+      score: target.score,
+      total: questionTotal,
+      seconds: Math.round(target.elapsedMs / 1000),
+      stageLabel: stage.label,
+      cutoff: stage.cutoff
+    });
+    if (result.ok) {
+      sent += 1;
+      await markNotified(stage, target.uid, { ok: true });
+    } else {
+      errors.push({ email: target.email, message: result.message });
+      await markNotified(stage, target.uid, { ok: false, message: result.message });
+      // A configuration error fails identically for everyone; stop rather than
+      // walking the whole list to collect seventy-five copies of the same message.
+      if (!result.retryable) break;
+    }
+  }
+
+  const payload: AdminNotifyResponse = {
+    stageId: stage.id,
+    sent,
+    failed: errors.length,
+    remaining: Math.max(0, remaining - sent),
+    total,
+    errors
+  };
+  return c.json(payload);
+});
+
+/**
+ * One message to one address, marking nobody.
+ *
+ * Exists so the template can be proved before it goes to seventy-five people. An
+ * EmailJS template whose "To Email" field is a fixed address rather than
+ * `{{to_email}}` fails by quietly sending every copy to one inbox, which a test send
+ * catches in ten seconds and a real send does not catch at all.
+ */
+api.post('/admin/notify/test', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  if (!emailConfigured()) {
+    return fail(c, 503, 'email-not-configured', 'EmailJS is not configured on the server.');
+  }
+  const body = (await c.req.json().catch(() => null)) as { toEmail?: unknown; stageId?: unknown } | null;
+  const toEmail = typeof body?.toEmail === 'string' ? body.toEmail.trim() : '';
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(toEmail)) {
+    return fail(c, 400, 'invalid-body', 'Give an address to send the test to.');
+  }
+  const stage = (typeof body?.stageId === 'string' ? stageById(body.stageId) : null) ?? STAGES[STAGES.length - 1];
+
+  const result = await sendFinalistMail({
+    toEmail,
+    toName: 'Test Recipient',
+    rank: 1,
+    score: 20,
+    total: 20,
+    seconds: 96,
+    stageLabel: stage.label,
+    cutoff: stage.cutoff
+  });
+  if (!result.ok) return fail(c, 502, 'server-error', result.message);
+  return c.json({ ok: true });
+});
+
+/** Forgets who has been told, so a whole cut can be mailed again. */
+api.post('/admin/notify/reset', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  const body = (await c.req.json().catch(() => null)) as { stageId?: unknown } | null;
+  const stage = typeof body?.stageId === 'string' ? stageById(body.stageId) : null;
+  if (!stage) return fail(c, 400, 'invalid-body', 'Which stage?');
+  const cleared = await resetNotifications(stage);
+  return c.json({ ok: true, cleared });
 });
 
 /** CSV, for the organisers' own records. Same data as the board, one row each. */

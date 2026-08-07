@@ -27,6 +27,13 @@ Nothing below works until the project exists.
 6. **Analytics** (optional): link a Google Analytics property, then copy the
    `measurementId` into `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID`. Leave it empty and
    analytics is a silent no-op.
+6b. **EmailJS** (optional, for telling the finalists): create a service and a
+   template, then set the four `EMAILJS_*` variables. Two dashboard settings decide
+   whether it works at all — allow API requests from non-browser applications
+   (Account → Security), and set the template's **To Email** field to
+   `{{to_email}}`. A fixed address there sends all 75 copies to one inbox, so send
+   the test message the admin panel asks for before the real one. Free-tier quota is
+   200 messages a month; 75 fits, two full retries do not.
 7. **Publish the rules.** They deny every client read and write, which is what
    keeps the answer key and everyone else's score out of the browser:
 
@@ -104,7 +111,11 @@ first cut is frozen, and nothing is open at all until you press start:
 2. When the room is done, **Freeze cut (top 150)** on Stage 1. Everyone below the
    line now sees their rank and a closed door; the top 150 see stage 2 open.
 3. Stage 2 runs. Then **Freeze cut (top 75)** — those 75 are the finalists.
-4. **Stop quiz**, then **Export CSV** for the records.
+4. **Email the 75.** Send yourself a test first — the panel asks for an address —
+   then press send and watch it count up. It is paced against EmailJS's rate limit,
+   so 75 takes about a minute, and it is safe to stop, resume, or retry: nobody is
+   mailed twice.
+5. **Stop quiz**, then **Export CSV** for the records.
 
 Freezing also closes out any attempt in that stage still sitting unfinished, so a
 participant whose laptop died is ranked on what they answered rather than dropped.

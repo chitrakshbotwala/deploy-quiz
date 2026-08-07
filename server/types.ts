@@ -212,6 +212,17 @@ export interface AdminRow {
   eligible: boolean | null;
 }
 
+/** Whether the finalists can be told, and how far that has got. */
+export interface AdminEmailState {
+  /** False when the deploy has no EmailJS credentials. The button says so. */
+  configured: boolean;
+  /** How many the frozen cut kept — the people who would be emailed. */
+  eligible: number;
+  sent: number;
+  /** Tried, failed, not yet sent. Retried by pressing send again. */
+  failed: number;
+}
+
 export interface AdminBoardResponse {
   stageId: string;
   label: string;
@@ -225,6 +236,25 @@ export interface AdminBoardResponse {
   started: number;
   /** Set once the cut is frozen. */
   cut: { at: string; cutoff: number; ranked: number; eligible: number } | null;
+  email: AdminEmailState;
+}
+
+/**
+ * One batch of sending, reported back. The caller keeps going while `remaining` is
+ * above zero, which is what makes a seventy-five-person send resumable and keeps
+ * any single request short.
+ */
+export interface AdminNotifyResponse {
+  stageId: string;
+  /** Sent in this batch. */
+  sent: number;
+  /** Failed in this batch. They stay unsent and are picked up by the next attempt. */
+  failed: number;
+  /** Still to send after this batch. */
+  remaining: number;
+  /** Everyone the cut kept. */
+  total: number;
+  errors: { email: string; message: string }[];
 }
 
 export interface AdminStagesResponse {
@@ -267,6 +297,8 @@ export interface ApiError {
     | 'already-answered'
     | 'not-served'
     | 'rate-limited'
+    | 'email-not-configured'
+    | 'no-cut'
     | 'server-error';
   message: string;
 }

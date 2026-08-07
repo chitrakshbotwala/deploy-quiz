@@ -7,6 +7,7 @@
  */
 import { BASE_PATH } from './basePath';
 import type {
+  AdminNotifyResponse,
   AdminStagesResponse,
   ApiError,
   CutSummaryResponse,
@@ -20,6 +21,8 @@ import type {
 
 export type {
   AdminBoardResponse,
+  AdminEmailState,
+  AdminNotifyResponse,
   AdminRow,
   AdminStagesResponse,
   CutSummaryResponse,
@@ -120,6 +123,14 @@ export const adminApi = {
   startQuiz: (restart = false) => post<EventState>('/admin/event/start', { restart }),
   stopQuiz: () => post<EventState>('/admin/event/stop'),
   cut: (stageId: string) => post<CutSummaryResponse>('/admin/cut', { stageId }),
+  /**
+   * One batch of emails. Call it again while `remaining` is above zero — a
+   * recipient is marked only on success, so repeating is safe and resumable.
+   */
+  notify: (stageId: string, limit = 8) => post<AdminNotifyResponse>('/admin/notify', { stageId, limit }),
+  notifyTest: (stageId: string, toEmail: string) =>
+    post<{ ok: true }>('/admin/notify/test', { stageId, toEmail }),
+  notifyReset: (stageId: string) => post<{ ok: true; cleared: number }>('/admin/notify/reset', { stageId }),
   clearCut: (stageId: string) => post<{ ok: true }>('/admin/cut/clear', { stageId }),
   /** A link rather than a fetch: the browser saves the file itself. */
   exportUrl: `${BASE_PATH}/api/admin/export`

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { QuizApiError, adminApi, formatSeconds } from '@/lib/quizApi';
 import type { AdminBoardResponse, AdminStagesResponse, EventState } from '@/lib/quizApi';
 import EventControls from './EventControls';
+import NotifyPanel from './NotifyPanel';
 
 /**
  * The leaderboard, and the only place one exists.
@@ -28,11 +29,14 @@ function Board({
   board,
   onCut,
   onClearCut,
+  onNotified,
   busy
 }: {
   board: AdminBoardResponse;
   onCut: (stageId: string) => void;
   onClearCut: (stageId: string) => void;
+  /** Refreshes the board after a send, so the emailed counts move. */
+  onNotified: () => void;
   busy: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -159,6 +163,11 @@ function Board({
           Show all {board.rows.length}
         </button>
       )}
+
+      {/* Under the standings it acts on, rather than in a settings screen: the list
+          of who is about to be emailed is the thing an organiser should be looking at
+          when they press send. */}
+      <NotifyPanel board={board} onDone={onNotified} />
     </section>
   );
 }
@@ -429,7 +438,14 @@ export default function AdminApp() {
         )}
 
         {data?.boards.map(board => (
-          <Board key={board.stageId} board={board} onCut={cut} onClearCut={clearCut} busy={busy} />
+          <Board
+            key={board.stageId}
+            board={board}
+            onCut={cut}
+            onClearCut={clearCut}
+            onNotified={() => load(true)}
+            busy={busy}
+          />
         ))}
       </div>
     </main>

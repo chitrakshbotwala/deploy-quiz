@@ -94,6 +94,24 @@ export const env = {
     return process.env.NODE_ENV === 'production';
   },
   /**
+   * EmailJS, for telling the finalists. All four are optional together: unset, the
+   * admin panel shows the feature as unconfigured instead of the server refusing to
+   * boot over a button nobody may press.
+   *
+   * `privateKey` is the one that must never carry a NEXT_PUBLIC_ prefix. EmailJS
+   * browser sends authenticate with the public key alone, so a private key in the
+   * bundle would let anyone who loaded the page send mail as the event for as long
+   * as the key lived.
+   */
+  get emailjs(): { serviceId: string; templateId: string; publicKey: string; privateKey: string } {
+    return {
+      serviceId: process.env.EMAILJS_SERVICE_ID ?? '',
+      templateId: process.env.EMAILJS_TEMPLATE_ID ?? '',
+      publicKey: process.env.EMAILJS_PUBLIC_KEY ?? '',
+      privateKey: process.env.EMAILJS_PRIVATE_KEY ?? ''
+    };
+  },
+  /**
    * Email domains allowed to sign in. Checked against the verified address on
    * the Firebase ID token, which for a Google-provider sign-in is Google's own
    * assertion rather than anything the visitor typed.

@@ -2,6 +2,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { DocumentReference, Transaction } from 'firebase-admin/firestore';
 import { fs } from './firebase';
 import type { Identity } from './firebase';
+import { emailConfigured } from './email';
 import {
   STAGES,
   questionOf,
@@ -132,6 +133,15 @@ interface CutMemberDoc {
   score: number;
   elapsedMs: number;
   eligible: boolean;
+  /**
+   * When this person was told they got through. Absent until they have been, which
+   * is what makes sending idempotent: a batch only ever picks up members without
+   * it, so a double-clicked button, a reloaded admin page, or a send that died
+   * halfway cannot mail anybody twice.
+   */
+  emailedAt?: Timestamp | null;
+  /** The last failure, kept so the admin panel can show what went wrong. */
+  emailError?: string | null;
 }
 
 interface StageMetaDoc {
@@ -972,6 +982,110 @@ export async function clearCut(stage: StageConfig): Promise<void> {
   bustEvent();
 }
 
+// ── Telling the ones who got through ─────────────────────────────────────────
+
+export interface NotifyTarget {
+  uid: string;
+  name: string;
+  email: string;
+  rank: number;
+  score: number;
+  elapsedMs: number;
+}
+
+/**
+ * The next few people to email, in rank order, skipping anyone already told.
+ *
+ * Batched rather than "all of them" because a send is paced against EmailJS's rate
+ * limit: seventy-five of them is around a minute of real work, and a single HTTP
+ * request held open for a minute is a request a proxy will eventually cut. The
+ * caller asks repeatedly and watches `remaining` fall, which also means an
+ * organiser closing the tab halfway leaves a resumable job rather than a mystery.
+ */
+export async function notifyTargets(
+  stage: StageConfig,
+  limit: number
+): Promise<{ targets: NotifyTarget[]; remaining: number; total: number }> {
+  // Single-field filter, so Firestore's automatic index serves it.
+  const snaps = await cutMembers(stage.id).where('eligible', '==', true).get();
+  const all = snaps.docs
+    .map(d => d.data() as CutMemberDoc)
+    .sort((a, b) => a.rank - b.rank);
+  const pending = all.filter(m => !m.emailedAt);
+  return {
+    targets: pending.slice(0, limit).map(m => ({
+      uid: m.uid,
+      name: m.name,
+      email: m.email,
+      rank: m.rank,
+      score: m.score,
+      elapsedMs: m.elapsedMs
+    })),
+    remaining: pending.length,
+    total: all.length
+  };
+}
+
+/**
+ * Whether a stage's cut is frozen, and the question total the stage was scored out
+ * of. One document read.
+ *
+ * Exists so the send route does not have to build the admin board to answer "is
+ * there a list of who got through?". The board is every standing and every cut
+ * member for both stages — a few thousand documents at full attendance — and a
+ * seventy-five-person mailing asks in ten batches, so reading it each time billed
+ * tens of thousands of reads to re-answer a question one document settles.
+ */
+export async function cutSummaryOf(
+  stage: StageConfig
+): Promise<{ frozen: boolean; questionTotal: number }> {
+  const snap = await stageDoc(stage.id).get();
+  const meta = snap.exists ? (snap.data() as Partial<StageMetaDoc>) : null;
+  return {
+    frozen: Boolean(meta?.cutAt),
+    // From the config, not from a document: it is how many questions the stage has.
+    questionTotal: sectionsOfStage(stage.id).reduce((n, s) => n + s.questions.length, 0)
+  };
+}
+
+/** Records the outcome. Only a success sets `emailedAt`, so a failure is retried. */
+export async function markNotified(
+  stage: StageConfig,
+  uid: string,
+  outcome: { ok: true } | { ok: false; message: string }
+): Promise<void> {
+  await cutMembers(stage.id)
+    .doc(uid)
+    .set(
+      outcome.ok
+        ? { emailedAt: Timestamp.now(), emailError: null }
+        : { emailError: outcome.message.slice(0, 300) },
+      { merge: true }
+    );
+}
+
+/**
+ * Forgets who has been told, so the whole cut can be mailed again.
+ *
+ * Deliberately a separate act from sending. Without it, "resend" would have to mean
+ * "ignore the marks", and a batched loop doing that would hand back the same first
+ * few people on every call and never finish.
+ */
+export async function resetNotifications(stage: StageConfig): Promise<number> {
+  const snaps = await cutMembers(stage.id).get();
+  let cleared = 0;
+  const CHUNK = 400;
+  for (let i = 0; i < snaps.docs.length; i += CHUNK) {
+    const batch = fs().batch();
+    for (const doc of snaps.docs.slice(i, i + CHUNK)) {
+      batch.set(doc.ref, { emailedAt: FieldValue.delete(), emailError: FieldValue.delete() }, { merge: true });
+      cleared += 1;
+    }
+    await batch.commit();
+  }
+  return cleared;
+}
+
 // ── The admin board ──────────────────────────────────────────────────────────
 
 /**
@@ -991,6 +1105,14 @@ export async function adminBoard(stage: StageConfig): Promise<AdminBoardResponse
 
   const members = new Map(memberSnaps.docs.map(d => [d.id, d.data() as CutMemberDoc]));
   const total = sections.reduce((n, s) => n + s.questions.length, 0);
+
+  const advanced = [...members.values()].filter(m => m.eligible);
+  const email = {
+    configured: emailConfigured(),
+    eligible: advanced.length,
+    sent: advanced.filter(m => m.emailedAt).length,
+    failed: advanced.filter(m => !m.emailedAt && m.emailError).length
+  };
 
   const rows: AdminRow[] = standingSnaps.docs
     .map(d => d.data() as StandingDoc)
@@ -1025,6 +1147,7 @@ export async function adminBoard(stage: StageConfig): Promise<AdminBoardResponse
     cutoff: stage.cutoff,
     sectionIds: sections.map(s => s.id),
     rows,
+    email,
     completed: rows.filter(r => r.sections.every(s => s !== null)).length,
     started: rows.length,
     cut:

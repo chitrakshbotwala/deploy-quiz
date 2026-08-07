@@ -179,6 +179,19 @@ the equivalent path, so links and QR codes made before the change still work.
 behind a six-attempts-per-hour per-IP limit. The session is a signed cookie that
 ages out in four hours.
 
+It is also where the finalists are told: once stage 2's cut is frozen, **Email the
+N finalists** sends through EmailJS, from the server, one message at a time.
+
+Sending is idempotent per recipient — a recipient is recorded only once EmailJS
+accepts the message, and a send only ever picks up people with no record — so a
+double-clicked button, a reloaded page, or a batch that dies halfway cannot mail
+anyone twice, and "40 of 75" is a resumable position. The panel makes you send a
+test to yourself first, because the likeliest mistake is an EmailJS template whose
+"To Email" field is a fixed address rather than `{{to_email}}`, which fails by
+quietly sending all 75 copies to one inbox. Failures are listed and retried by
+pressing send again. Unconfigured (no `EMAILJS_*` variables), the feature is
+visibly switched off rather than silently absent.
+
 It is the only leaderboard in the app. No participant-facing route returns another
 participant's row, a rank other than their own, or any score but their own total.
 The board is also where the quiz is started and stopped — with a clock showing how
