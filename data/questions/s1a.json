@@ -1,0 +1,99 @@
+{
+  "sectionId": "s1a",
+  "stageId": "stage1",
+  "label": "Stage 1 · Section 1",
+  "blurb": "Ten questions. Ten seconds each.",
+  "secondsPerQuestion": 10,
+  "questions": [
+    {
+      "id": "s1a-q1",
+      "topic": "Complexity",
+      "prompt": "Binary search over a sorted array of n items runs in",
+      "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
+      "answer": 1,
+      "note": "Each comparison throws away half of what is left, so the work grows with the number of halvings.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s1a-q2",
+      "topic": "HTTP",
+      "prompt": "Signed in, still not allowed. Which status?",
+      "options": ["400 Bad Request", "401 Unauthorized", "403 Forbidden", "404 Not Found"],
+      "answer": 2,
+      "note": "401 means the server does not know who you are. 403 means it knows, and the answer is still no.",
+      "accent": "#b497cf"
+    },
+    {
+      "id": "s1a-q3",
+      "topic": "JavaScript",
+      "prompt": "What does typeof null return?",
+      "options": ["\"null\"", "\"object\"", "\"undefined\"", "It throws"],
+      "answer": 1,
+      "note": "A tagging bug from 1995 that was never fixed, because fixing it would break the web.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s1a-q4",
+      "topic": "REST",
+      "prompt": "Which method is not idempotent?",
+      "options": ["GET", "PUT", "DELETE", "POST"],
+      "answer": 3,
+      "note": "Send the same POST twice and you get two rows. PUT and DELETE land on the same end state every time.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s1a-q5",
+      "topic": "Git",
+      "prompt": "You pushed a broken commit to main. Safest undo?",
+      "options": ["git revert", "git reset --hard", "git commit --amend", "git rebase -i"],
+      "answer": 0,
+      "note": "revert writes a new commit that undoes the old one. The other three rewrite history everyone already pulled.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s1a-q6",
+      "topic": "Networking",
+      "prompt": "Which one guarantees your packets arrive in order?",
+      "options": ["UDP", "TCP", "IP", "ICMP"],
+      "answer": 1,
+      "note": "TCP buys ordering and delivery with sequence numbers and retransmits. UDP trades both away for latency.",
+      "accent": "#b497cf"
+    },
+    {
+      "id": "s1a-q7",
+      "topic": "Floating point",
+      "prompt": "In JavaScript, 0.1 + 0.2 === 0.3 evaluates to",
+      "options": ["true", "false", "NaN", "Depends on the engine"],
+      "answer": 1,
+      "note": "Neither 0.1 nor 0.2 is exact in binary64. The sum lands at 0.30000000000000004.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s1a-q8",
+      "topic": "DNS",
+      "prompt": "A CNAME record points a name at",
+      "options": ["An IPv4 address", "An IPv6 address", "Another name", "A mail server"],
+      "answer": 2,
+      "note": "A maps a name to an address. CNAME maps a name to a name, and the resolver then chases that one.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s1a-q9",
+      "topic": "Databases",
+      "prompt": "Adding an index makes which operation slower?",
+      "options": ["SELECT by that column", "INSERT", "A join on that column", "Nothing at all"],
+      "answer": 1,
+      "note": "The index is a second structure on disk, and every insert, update, and delete has to maintain it.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s1a-q10",
+      "topic": "Apollo",
+      "prompt": "The Apollo Guidance Computer had roughly how much RAM?",
+      "options": ["4 KB", "4 MB", "64 KB", "1 MB"],
+      "answer": 0,
+      "note": "2048 words of erasable memory, about 4 KB, and 36 KB of rope core. It landed two people on the Moon.",
+      "accent": "#b497cf"
+    }
+  ]
+}

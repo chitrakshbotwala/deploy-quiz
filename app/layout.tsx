@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Archivo, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import './globals.css';
+import { BASE_PATH } from '@/lib/basePath';
 
 /**
  * Three families, self-hosted.
@@ -39,13 +40,15 @@ export const metadata: Metadata = {
   // Open Graph images have to be absolute URLs for a crawler, and a crawler does
   // not know what `basePath` is. This is what Next resolves the relative paths
   // below against.
-  metadataBase: new URL(process.env.NEXT_PUBLIC_QUIZ_URL ?? 'https://gdgkiit.in/dor/quiz'),
+  // Follows the mount point rather than hard-coding it: an Open Graph image has to
+  // be an absolute URL for a crawler, and a crawler knows nothing about basePath.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_QUIZ_URL ?? `https://gdgkiit.in${BASE_PATH}`),
   title: 'GDG KIIT — Deploy or [REDACTED]: The Quiz',
   description:
-    'Ten questions on code, protocols, and one guidance computer. Fly the asteroid field, answer as you go, and get your readout.',
+    'Two rounds on code, protocols, and one guidance computer. Ten seconds a question. Fly the asteroid field and answer as you go.',
   openGraph: {
     title: 'GDG KIIT — Deploy or [REDACTED]: The Quiz',
-    description: 'Ten questions on code, protocols, and one guidance computer. One rock per question.',
+    description: 'Two rounds, ten seconds a question. One rock per question.',
     type: 'website',
     images: ['/og-image.svg']
   },

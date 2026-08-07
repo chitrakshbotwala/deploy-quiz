@@ -1,0 +1,59 @@
+# Caddy fetches and renews the certificate on its own; there is no certbot step.
+# Replace the email.
+{
+	email you@kiit.ac.in
+}
+
+gdgkiit.in {
+	encode zstd gzip
+
+	# The quiz — page, assets and API — is one Next process on loopback, and it
+	# is mounted at /dor/quiz rather than at the root. `handle` (not
+	# `handle_path`) is the point: the path must arrive at Next intact, because
+	# Next's own `basePath` expects to see /dor/quiz on the request. Stripping the
+	# prefix here would make every route 404 and every asset URL wrong.
+	handle /dor/quiz* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# Whatever else this domain serves. The landing page itself stays on Vercel;
+	# if it is ever pointed here, this is where it goes.
+	handle {
+		respond "Not found" 404
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		# Fonts are self-hosted by next/font, so there is no fonts.googleapis.com
+		# or fonts.gstatic.com exemption here any more. WebGL needs no exemption
+		# either; three.js compiles shaders from strings, not scripts.
+		#
+		# What the third-party entries are for, because every one of them is
+		# load-bearing and the failure mode of a missing one is silence:
+		#
+		#   *.firebaseapp.com   frame-src + connect-src. signInWithPopup opens
+		#                       https://<authDomain>/__/auth/handler and also plants
+		#                       a hidden iframe on the auth domain. Miss it and the
+		#                       popup opens and then hangs with a blank page.
+		#   accounts.google.com frame-src + connect-src for the account chooser.
+		#   apis.google.com     script-src, the gapi shim Firebase Auth loads.
+		#   identitytoolkit /   connect-src. The two REST endpoints Firebase Auth
+		#   securetoken         actually calls: sign-in, then token refresh.
+		#   googletagmanager    script-src, and *.google-analytics.com +
+		#                       *.analytics.google.com in connect-src: this is all
+		#                       Analytics. Drop these three and analytics quietly
+		#                       stops while the quiz keeps working — which is the
+		#                       right order of priorities if you ever have to trim.
+		#   firebase.googleapis / firebaseinstallations
+		#                       connect-src. Analytics fetches its own remote config
+		#                       and registers an installation id before it reports.
+		#
+		# Firestore is deliberately absent: the browser never talks to it. See
+		# firestore.rules.
+		#
+		# 'unsafe-inline' in style-src is Next's requirement, not a shortcut: it
+		# inlines critical CSS and next/font's @font-face rules into <style> tags.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com https://www.googletagmanager.com; img-src 'self' data: blob: https://*.googleusercontent.com https://www.google-analytics.com; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebase.googleapis.com https://firebaseinstallations.googleapis.com https://*.firebaseapp.com https://accounts.google.com https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; frame-src https://*.firebaseapp.com https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'"
+	}
+}

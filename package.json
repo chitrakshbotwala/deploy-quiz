@@ -3,13 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "rules:deploy": "firebase deploy --only firestore:rules,firestore:indexes"
   },
   "dependencies": {
+    "firebase": "^12.17.1",
+    "firebase-admin": "^14.2.0",
     "gsap": "^3.13.0",
+    "hono": "^4.6.14",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

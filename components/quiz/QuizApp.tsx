@@ -1,243 +1,277 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { gsap } from '@/lib/gsap';
-import { usePrefersReducedMotion, useIsMobile } from '@/hooks/useMediaQuery';
-import { useQuiz } from '@/hooks/useQuiz';
-import { quizQuestions } from '@/content/quizQuestions';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useIsMobile } from '@/hooks/useMediaQuery';
+import { signOutFirebase, track, trackScreen } from '@/lib/firebase';
+import { QuizApiError, quizApi } from '@/lib/quizApi';
+import type { FinishResponse, SectionRunResponse, StateResponse } from '@/lib/quizApi';
 import Starfield from '@/components/Starfield';
 import Nav from '@/components/Nav';
 import ContextMenu from '@/components/ContextMenu';
-import AsteroidField from './AsteroidField';
-import QuestionPanel from './QuestionPanel';
-import ResultPanel from './ResultPanel';
-
-const KEY_CODES = ['a', 'b', 'c', 'd', 'e', 'f'];
+import SignInGate from './SignInGate';
+import StageLadder from './StageLadder';
+import SectionRun from './SectionRun';
+import EliminatedPanel from './EliminatedPanel';
 
 /**
- * /quiz — the same journey, run as a question at a time.
+ * The shell.
  *
- * Two renderers, one engine, one frame:
- *  - Desktop with motion allowed gets the WebGL asteroid field. Answering flies
- *    the camera to the next rock, through warp streaks, in the question's accent.
- *  - Everything else gets the warp panels: the identical panel choreography the
- *    event chapters use on a phone, over the same canvas starfield.
- *  - Reduced motion gets the panels with no warp at all, which is the end state
- *    of both: the question is simply there.
+ * Everything that outlives a section lives here: the starfield, the nav, the
+ * frame, and the one piece of state the whole app is a function of — the ladder
+ * the server hands back from /api/state. Every screen below is chosen from that
+ * state rather than from a route, because the flow is not navigable: you are
+ * where the server says you are, and a URL that claimed otherwise would be a
+ * second, wrong implementation of the rules.
  *
- * The transition is sequenced by hand rather than left to a CSS class swap,
- * because the state change has to land INSIDE the warp: the outgoing panel
- * accelerates away, the accent flash peaks, the question changes under the
- * flash, and the new panel drops out of the warp behind it. Changing state first
- * and animating after would show the next question for a frame before it flew in.
+ * A section is mounted only once the server has opened an attempt and served a
+ * question, which is what lets `useSection` seed itself straight from that
+ * response in a `useState` initialiser instead of syncing to it in an effect. By
+ * the time it mounts, the run is a fact.
  */
+type View =
+  | { kind: 'loading' }
+  | { kind: 'gate' }
+  | { kind: 'ladder' }
+  | { kind: 'eliminated'; stageIndex: number }
+  | { kind: 'run'; run: SectionRunResponse };
+
 export default function QuizApp() {
-  const reduced = usePrefersReducedMotion();
   const isMobile = useIsMobile();
-  const useField = !isMobile && !reduced;
-
-  const quiz = useQuiz(quizQuestions);
-  const { phase, index, question, total, picked, isCorrect } = quiz;
-
-  const stageRef = useRef<HTMLDivElement>(null);
-  const flashRef = useRef<HTMLDivElement>(null);
-  // Guards the window between "warp-out started" and "new panel mounted". Two
-  // Next presses inside 400ms would otherwise queue two advances and skip a
-  // question.
-  const [warping, setWarping] = useState(false);
-  const warpingRef = useRef(false);
-
-  const advance = useCallback(() => {
-    if (warpingRef.current || phase !== 'feedback') return;
-    if (reduced) {
-      quiz.next();
-      return;
-    }
-    warpingRef.current = true;
-    setWarping(true);
-
-    const stage = stageRef.current;
-    const flash = flashRef.current;
-    // The flash is the next question's accent, not this one's: it is the light
-    // you are arriving in, so it belongs to where you are going.
-    // On the last question the next stop is the readout, which has no question
-    // accent of its own, so the flash falls back to the site's own pink.
-    const nextAccent = quiz.isLast ? '#ff9ffc' : quizQuestions[index + 1].accent;
-    const tl = gsap.timeline({
-      onComplete: () => {
-        warpingRef.current = false;
-        setWarping(false);
-        quiz.next();
-      }
-    });
-    if (flash) {
-      tl.set(flash, {
-        background: `radial-gradient(circle at 62% 48%, #ffffff 0%, ${nextAccent} 55%, ${nextAccent} 100%)`
-      }, 0).fromTo(flash, { autoAlpha: 0 }, { autoAlpha: 0.55, duration: 0.34, ease: 'power2.in' }, 0.06);
-    }
-    if (stage) {
-      // Same warp-out vocabulary as the event panels: accelerate toward the
-      // viewer and blur away. Blur is desktop-only, exactly as on the main page,
-      // because a full-viewport re-raster per frame is the phone's worst cost.
-      tl.to(
-        stage,
-        {
-          scale: isMobile ? 1.12 : 1.24,
-          autoAlpha: 0,
-          filter: isMobile ? 'blur(0px)' : 'blur(16px)',
-          duration: 0.44,
-          ease: 'power3.in'
-        },
-        0
-      );
-    }
-  }, [index, isMobile, phase, quiz, reduced, total]);
-
-  // ── Warp-in ───────────────────────────────────────────────────────────────
-  // Runs on every stop, including the readout. Reads its targets off the panel's
-  // `data-warp` hooks so neither panel has to thread refs out through forwardRef
-  // (the same contract EventDetailsPanel has with JourneySection).
-  useLayoutEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    if (reduced) {
-      gsap.set(stage, { clearProps: 'all' });
-      return;
-    }
-
-    // Empty selections are dropped rather than passed through: the field variant
-    // has no ghost numeral and no blobs, and GSAP logs a "target not found"
-    // warning for every empty array it is handed.
-    const q = (sel: string) => {
-      const found = Array.from(stage.querySelectorAll(sel));
-      return found.length ? found : null;
-    };
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline();
-      const part = (
-        sel: string,
-        from: gsap.TweenVars,
-        to: gsap.TweenVars,
-        at: number
-      ) => {
-        const targets = q(sel);
-        if (targets) tl.fromTo(targets, from, to, at);
-      };
-
-      tl.fromTo(
-        stage,
-        { autoAlpha: 0, scale: isMobile ? 1.06 : 1.14, filter: isMobile ? 'blur(0px)' : 'blur(14px)' },
-        { autoAlpha: 1, scale: 1, filter: 'blur(0px)', duration: 0.78, ease: 'power3.out' },
-        0
-      );
-      // Depth first and slowest: the ghost numeral is the heaviest mass on the
-      // panel and the last thing to stop moving.
-      part('[data-warp="ghost"]', { autoAlpha: 0, scale: 1.4 }, { autoAlpha: 1, scale: 1, duration: 1.25, ease: 'power3.out' }, 0.05);
-      part('[data-warp="blobs"]', { autoAlpha: 0, scale: 1.25 }, { autoAlpha: 1, scale: 1, duration: 1, ease: 'power3.out' }, 0.04);
-      // Then the content reports in, in reading order.
-      part('[data-warp="eyebrow"]', { autoAlpha: 0, yPercent: 70 }, { autoAlpha: 1, yPercent: 0, duration: 0.34, ease: 'power3.out' }, 0.16);
-      // The rule wipes rather than fades: a line drawing itself left to right is
-      // the beat that says the panel has come online.
-      part('[data-warp="rule"]', { scaleX: 0 }, { scaleX: 1, duration: 0.5, transformOrigin: '0% 50%', ease: 'power3.out' }, 0.2);
-      // The prompt rises out of its own overflow clip. Transform only, so a
-      // display line reveals without repainting the text.
-      part('[data-warp="title"]', { yPercent: 120 }, { yPercent: 0, duration: 0.6, ease: 'power4.out' }, 0.18);
-      part('[data-warp="tagline"]', { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.34, ease: 'power3.out' }, 0.34);
-      // Options print in row by row. This is the beat the whole page exists for,
-      // so it gets the longest stagger on the panel.
-      part(
-        '[data-warp="option"]',
-        { autoAlpha: 0, yPercent: 38 },
-        { autoAlpha: 1, yPercent: 0, duration: 0.36, ease: 'power3.out', stagger: 0.07 },
-        0.4
-      );
-      part('[data-warp="meta"]', { autoAlpha: 0, yPercent: 45 }, { autoAlpha: 1, yPercent: 0, duration: 0.32, ease: 'power3.out', stagger: 0.06 }, 0.48);
-      part('[data-warp="cta"]', { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: 'power3.out' }, 0.62);
-      // The flash decays across the arrival rather than before it, so the panel
-      // is rushing at the viewer inside the light instead of fading in politely
-      // after it.
-      if (flashRef.current) tl.to(flashRef.current, { autoAlpha: 0, duration: 0.62, ease: 'power2.out' }, 0);
-    }, stage);
-    return () => ctx.revert();
-  }, [index, isMobile, phase === 'result', reduced]);
-
-  // Keyboard: A–D or 1–4 answer the live question. Enter is deliberately not
-  // bound here — the Next button takes focus the moment it appears, so Enter is
-  // already the browser's own activation and binding it again would fire twice.
+  // Read by every async continuation before it touches state. The polls and the
+  // sign-in round trip both outlive a fast unmount otherwise.
+  const mounted = useRef(true);
   useEffect(() => {
-    if (phase !== 'question') return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const k = e.key.toLowerCase();
-      const byLetter = KEY_CODES.indexOf(k);
-      const byDigit = /^[1-9]$/.test(k) ? Number(k) - 1 : -1;
-      const pickIndex = byLetter >= 0 ? byLetter : byDigit;
-      if (pickIndex < 0 || pickIndex >= question.options.length) return;
-      e.preventDefault();
-      quiz.pick(pickIndex);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [phase, question, quiz]);
+  }, []);
+  const [state, setState] = useState<StateResponse | null>(null);
+  const [view, setView] = useState<View>({ kind: 'loading' });
+  const [busySection, setBusySection] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const answered = phase === 'feedback';
-  const outcome: 'none' | 'correct' | 'wrong' = !answered ? 'none' : isCorrect ? 'correct' : 'wrong';
+  /**
+   * Chooses the screen for a given ladder. The eliminated page wins over the
+   * ladder: a shut door needs its reason on screen, not a badge in a list. It is
+   * shown once per load — `onBack` drops to the ladder and stays there — because
+   * re-asserting it on every state refresh would trap someone who wants to look
+   * at their own scores.
+   */
+  const landOn = useCallback((next: StateResponse, allowEliminated = true) => {
+    setState(next);
+    if (!next.user) {
+      setView({ kind: 'gate' });
+      return;
+    }
+    const eliminatedAt = next.stages.findIndex(s => s.status === 'eliminated');
+    if (allowEliminated && eliminatedAt >= 0) {
+      setView({ kind: 'eliminated', stageIndex: eliminatedAt });
+      return;
+    }
+    setView({ kind: 'ladder' });
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    quizApi
+      .state()
+      .then(next => {
+        if (live) landOn(next);
+      })
+      .catch(() => {
+        // The probe failing must not block the quiz — fall through to the gate,
+        // where signing in will surface any real outage with a message.
+        if (live) setView({ kind: 'gate' });
+      });
+    return () => {
+      live = false;
+    };
+  }, [landOn]);
+
+  // One screen_view per screen. There are no route changes to hook: the whole
+  // quiz is one URL.
+  useEffect(() => {
+    trackScreen(view.kind);
+  }, [view.kind]);
+
+  /**
+   * While sitting on the ladder, poll.
+   *
+   * Three things can change a participant's screen without them touching it: the
+   * organisers starting the quiz, stopping it, or freezing a cut. Every one of
+   * those is a moment where the alternative is shouting "refresh your page" across
+   * a hall and being heard by half the room — so the page finds out by itself.
+   *
+   * It polls `/event`, not `/state`: one cached document against nine Firestore
+   * reads, which at nine hundred open tabs is the difference between a trickle and
+   * a bill. `revision` is a fingerprint of all three of those events, so a change
+   * anywhere in them is one string comparison here, and only then is the full
+   * ladder worth fetching.
+   *
+   * Not while a section is open — a run has no use for this and the questions are
+   * already carrying their own state.
+   */
+  useEffect(() => {
+    if (view.kind !== 'ladder' && view.kind !== 'eliminated') return;
+    if (!state) return;
+    const seen = state.event.revision;
+    const id = window.setInterval(() => {
+      quizApi
+        .event()
+        .then(event => {
+          if (!mounted.current) return;
+          if (event.revision === seen) {
+            // Nothing moved. Patch the event in anyway: the `now` it carries keeps
+            // the waiting copy's own sense of time honest.
+            setState(current => (current ? { ...current, event } : current));
+            return;
+          }
+          return quizApi.state().then(next => {
+            if (!mounted.current) return;
+            // `allowEliminated` on: a cut that just landed the wrong way is exactly
+            // the case where the participant needs the screen that explains it.
+            landOn(next);
+          });
+        })
+        .catch(() => undefined);
+    }, 8_000);
+    return () => window.clearInterval(id);
+  }, [landOn, state, view.kind]);
+
+  const signIn = useCallback(
+    (idToken: string) => {
+      setSigningIn(true);
+      setError(null);
+      quizApi
+        .login(idToken)
+        .then(next => {
+          track('login');
+          landOn(next);
+        })
+        .catch((err: unknown) => {
+          setError(
+            err instanceof QuizApiError ? err.message : 'Could not reach the server. Try again in a moment.'
+          );
+        })
+        .finally(() => setSigningIn(false));
+    },
+    [landOn]
+  );
+
+  const signOut = useCallback(() => {
+    void signOutFirebase();
+    quizApi
+      .logout()
+      .catch(() => undefined)
+      .finally(() => {
+        setState(null);
+        setView({ kind: 'gate' });
+      });
+  }, []);
+
+  const startSection = useCallback((sectionId: string) => {
+    setBusySection(sectionId);
+    setError(null);
+    quizApi
+      .openSection(sectionId)
+      .then(run => {
+        track('section_start', { section_id: sectionId });
+        setView({ kind: 'run', run });
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof QuizApiError ? err.message : 'Could not open that section.');
+        // Whatever the refusal was, the ladder we are holding is out of date —
+        // the server is the one that knows why.
+        quizApi
+          .state()
+          .then(next => landOn(next, false))
+          .catch(() => undefined);
+      })
+      .finally(() => setBusySection(null));
+  }, [landOn]);
+
+  /** From the readout. Re-reads the ladder so a freshly opened section appears. */
+  const afterSection = useCallback(
+    (_finish: FinishResponse) => {
+      setView({ kind: 'loading' });
+      quizApi
+        .state()
+        .then(next => landOn(next))
+        .catch(() => {
+          setError('Your section is recorded, but the page could not refresh. Reload it.');
+          setView({ kind: 'ladder' });
+        });
+    },
+    [landOn]
+  );
 
   return (
     <div className="relative h-[100dvh] overflow-hidden bg-space text-gray-100">
       {/* Wrapped rather than dropped in as its own fixed layer: Starfield's
           standalone mode sits at z-index -1, which puts it BEHIND this
-          container's own `bg-space` and renders it invisible. Same wrapper
-          pattern SpaceBackground uses on the landing page. */}
+          container's own `bg-space` and renders it invisible. */}
       <div className="absolute inset-0 z-0" aria-hidden="true">
         <Starfield fixed={false} count={isMobile ? 110 : 200} mobile={isMobile} />
       </div>
-      {useField && (
-        <AsteroidField
-          index={phase === 'result' ? total : index}
-          total={total}
-          accent={phase === 'result' ? '#ff9ffc' : question.accent}
-          outcome={outcome}
-        />
-      )}
       <Nav />
 
-      <main className="relative z-10 h-full">
-        <div ref={stageRef} className="absolute inset-0 will-change-transform">
-          {phase === 'result' ? (
-            <ResultPanel
-              questions={quizQuestions}
-              answers={quiz.answers}
-              score={quiz.score}
-              bestStreak={quiz.bestStreak}
-              startedAt={quiz.startedAt}
-              finishedAt={quiz.finishedAt ?? Date.now()}
-              onRestart={quiz.restart}
-            />
-          ) : (
-            <QuestionPanel
-              key={question.id}
-              question={question}
-              index={index}
-              total={total}
-              answered={answered}
-              picked={picked}
-              score={quiz.score}
-              streak={quiz.streak}
-              startedAt={quiz.startedAt}
-              variant={useField ? 'field' : 'warp'}
-              isLast={quiz.isLast}
-              onPick={quiz.pick}
-              onNext={advance}
-              className={warping ? 'pointer-events-none' : ''}
-            />
-          )}
-        </div>
-      </main>
+      {view.kind === 'loading' && (
+        <main className="relative z-10 flex h-full items-center justify-center">
+          <p className="font-mono text-[0.7rem] uppercase tracking-[0.3em] text-white/35">Establishing link…</p>
+        </main>
+      )}
 
-      {/* Accent flash. Screen blend so it glows over the near-black page instead
-          of washing it grey, exactly as the journey's warp flash does. */}
-      <div ref={flashRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-40 opacity-0 mix-blend-screen" />
+      {view.kind === 'gate' && (
+        <main className="relative z-10 h-full">
+          <div className="absolute inset-0">
+            <SignInGate
+              onToken={signIn}
+              busy={signingIn}
+              error={error}
+              emailDomains={state?.emailDomains ?? []}
+              event={state?.event ?? null}
+              stageCount={state?.preview.stages ?? 2}
+              sectionCount={state?.preview.sections ?? 3}
+              secondsPerQuestion={state?.preview.secondsPerQuestion ?? 10}
+            />
+          </div>
+        </main>
+      )}
+
+      {view.kind === 'ladder' && state?.user && (
+        <main className="relative z-10 h-full">
+          <div className="absolute inset-0">
+            <StageLadder
+              name={state.user.name}
+              stages={state.stages}
+              event={state.event}
+              onStart={startSection}
+              onSignOut={signOut}
+              busySection={busySection}
+              error={error}
+            />
+          </div>
+        </main>
+      )}
+
+      {view.kind === 'eliminated' && state && (
+        <main className="relative z-10 h-full">
+          <div className="absolute inset-0">
+            <EliminatedPanel
+              stage={state.stages[view.stageIndex]}
+              // The last stage's cut produces the finalists, so there is no next
+              // stage to name — "not eligible for the finals" is the honest line.
+              nextStageLabel={state.stages[view.stageIndex + 1]?.label ?? 'the finals'}
+              onBack={() => setView({ kind: 'ladder' })}
+            />
+          </div>
+        </main>
+      )}
+
+      {view.kind === 'run' && <SectionRun run={view.run} onDone={afterSection} />}
+
       <ContextMenu />
     </div>
   );

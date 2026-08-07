@@ -1,0 +1,43 @@
+# /etc/systemd/system/dor-quiz.service
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dor-quiz
+#   journalctl -u dor-quiz -f
+[Unit]
+Description=Deploy or [REDACTED] quiz (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gdg
+WorkingDirectory=/srv/dor-quiz
+# Secrets live here, not in the repo and not in this unit file.
+#   sudo install -d -m 750 -o root -g gdg /etc/dor-quiz
+#   sudo install -m 640 -o root -g gdg .env.example /etc/dor-quiz/env   # then edit
+#
+# Note the NEXT_PUBLIC_* values in that file are read at BUILD time, not here.
+# Changing one means re-running `npm run build`; restarting the service will not
+# pick it up, because those values are compiled into the client bundle.
+EnvironmentFile=/etc/dor-quiz/env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# The process needs to read the repo, write .next's cache, and reach Google over
+# HTTPS (Firestore and token verification). Nothing else — there is no local
+# database any more.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/dor-quiz
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
