@@ -2,118 +2,178 @@
   "sectionId": "s2a",
   "stageId": "stage2",
   "label": "Stage 2 · The final",
-  "blurb": "Top 150 only. Ten seconds a question, and the clock is the tie-break.",
+  "blurb": "Fifteen questions. Ten seconds each.",
   "secondsPerQuestion": 10,
   "questions": [
     {
       "id": "s2a-q1",
-      "topic": "Consensus",
-      "prompt": "Raft elects a leader to guarantee",
+      "topic": "Astronomy software",
+      "prompt": "In astronomical image processing, what does the FITS file format stand for?",
       "options": [
-        "Lower latency",
-        "A single ordering of the log",
-        "Automatic sharding",
-        "Zero downtime"
+        "Fast Image Transfer System",
+        "Flexible Image Transport System",
+        "Frequency Integrated Telescope Spectrum",
+        "Formatted Image Text Sequence"
       ],
       "answer": 1,
-      "note": "One leader means one append order, which is what replicas replay.",
+      "note": "FITS is the standard data format used widely in astronomy.",
       "accent": "#ff9ffc"
     },
     {
       "id": "s2a-q2",
-      "topic": "Isolation",
-      "prompt": "Which anomaly does REPEATABLE READ still allow in the SQL standard?",
-      "options": ["Dirty read", "Non-repeatable read", "Phantom read", "None"],
-      "answer": 2,
-      "note": "Only SERIALIZABLE rules out phantoms; a new matching row can still appear.",
+      "topic": "Image analysis",
+      "prompt": "What specific technique is most commonly used in software to help users visually identify moving objects (like asteroids) against a background of fixed stars?",
+      "options": [
+        "Color shifting",
+        "Image Blinking (rapidly switching between sequential images)",
+        "Thermal contrasting",
+        "Audio wave mapping"
+      ],
+      "answer": 1,
+      "note": "Blinking sequential images makes moving objects jump out against fixed stars.",
       "accent": "#b497cf"
     },
     {
       "id": "s2a-q3",
-      "topic": "Compilers",
-      "prompt": "Tail-call optimisation removes",
-      "options": ["Dead code", "A stack frame", "A heap allocation", "A branch"],
+      "topic": "Coordinates",
+      "prompt": "Right Ascension (RA) in the equatorial coordinate system is the astronomical equivalent of Earth's:",
+      "options": ["Latitude", "Longitude", "Altitude", "Equator"],
       "answer": 1,
-      "note": "The call in tail position reuses the caller's frame instead of pushing a new one.",
+      "note": "Right Ascension is analogous to longitude on the sky sphere.",
       "accent": "#d9bf6b"
     },
     {
       "id": "s2a-q4",
-      "topic": "Browsers",
-      "prompt": "Which does NOT trigger layout?",
-      "options": ["offsetHeight read", "transform: translate", "className change", "appendChild"],
-      "answer": 1,
-      "note": "Transforms are composited; they skip layout and paint entirely.",
+      "topic": "Coordinates",
+      "prompt": "Declination (Dec) in the equatorial coordinate system is the astronomical equivalent of Earth's:",
+      "options": ["Latitude", "Longitude", "Prime Meridian", "Hemisphere"],
+      "answer": 0,
+      "note": "Declination is analogous to latitude and measures north/south angle.",
       "accent": "#8fa9e8"
     },
     {
       "id": "s2a-q5",
-      "topic": "Cryptography",
-      "prompt": "An HMAC needs",
-      "options": ["A key pair", "A shared secret", "A certificate", "A nonce only"],
-      "answer": 1,
-      "note": "Symmetric: the same secret both signs and verifies.",
+      "topic": "Asteroids",
+      "prompt": "Astronomers classify asteroids into three main compositional types. Which of the following represents the most common type, composed largely of carbonaceous materials?",
+      "options": ["C-type", "S-type", "M-type", "V-type"],
+      "answer": 0,
+      "note": "C-type asteroids are carbon-rich and are the most common class.",
       "accent": "#ff9ffc"
     },
     {
       "id": "s2a-q6",
-      "topic": "Memory",
-      "prompt": "A page fault means",
-      "options": [
-        "The process crashed",
-        "The mapping is not resident",
-        "The disk failed",
-        "The cache line was evicted"
-      ],
+      "topic": "Asteroids",
+      "prompt": "\"Trojan\" asteroids in our solar system are primarily known for sharing an orbit with which major planet?",
+      "options": ["Mars", "Jupiter", "Saturn", "Neptune"],
       "answer": 1,
-      "note": "The MMU traps to the kernel, which fetches or maps the page and resumes.",
+      "note": "The best-known Trojan populations share Jupiter's orbit near Lagrange points.",
       "accent": "#b497cf"
     },
     {
       "id": "s2a-q7",
-      "topic": "Rate limiting",
-      "prompt": "A token bucket differs from a fixed window by allowing",
-      "options": ["Bursts", "Higher averages", "Per-user keys", "Nothing"],
+      "topic": "Solar system",
+      "prompt": "What is the ecliptic?",
+      "options": [
+        "The plane of Earth's orbit around the Sun.",
+        "The shadow cast by Earth on the Moon.",
+        "The alignment of all planets in a straight line.",
+        "The boundary of the solar system."
+      ],
       "answer": 0,
-      "note": "Saved tokens absorb a burst while the long-run average stays capped.",
+      "note": "The ecliptic is the orbital plane of Earth around the Sun.",
       "accent": "#d9bf6b"
     },
     {
       "id": "s2a-q8",
-      "topic": "Git internals",
-      "prompt": "A git commit object stores",
-      "options": ["A diff", "A tree hash", "A file list with contents", "A branch name"],
-      "answer": 1,
-      "note": "Commits point at a tree snapshot; diffs are computed on demand.",
+      "topic": "Comets",
+      "prompt": "Which theoretical, spherical region at the outermost edge of our solar system is believed to be the source of most long-period comets?",
+      "options": ["Kuiper Belt", "Asteroid Belt", "Oort Cloud", "Heliosphere"],
+      "answer": 2,
+      "note": "The Oort Cloud is thought to supply many long-period comets.",
       "accent": "#8fa9e8"
     },
     {
       "id": "s2a-q9",
-      "topic": "HTTP/2",
-      "prompt": "Multiplexing removes",
+      "topic": "Telescopes",
+      "prompt": "Which parameter of a telescope determines its \"light-gathering power,\" allowing it to see fainter objects?",
       "options": [
-        "TLS overhead",
-        "Head-of-line blocking at the HTTP layer",
-        "DNS lookups",
-        "The need for caching"
+        "Focal length",
+        "Magnification",
+        "Aperture (diameter of the primary lens/mirror)",
+        "Eyepiece size"
       ],
-      "answer": 1,
-      "note": "Streams interleave on one connection. TCP-level blocking remained until QUIC.",
+      "answer": 2,
+      "note": "Larger aperture captures more light and improves faint-object visibility.",
       "accent": "#ff9ffc"
     },
     {
       "id": "s2a-q10",
-      "topic": "Apollo",
-      "prompt": "The 1202 alarm during Apollo 11's descent meant",
+      "topic": "Stellar evolution",
+      "prompt": "What is the expected final evolutionary state of a medium-mass star like our Sun?",
+      "options": ["Black Hole", "Neutron Star", "White Dwarf", "Red Supergiant"],
+      "answer": 2,
+      "note": "After shedding outer layers, Sun-like stars end as white dwarfs.",
+      "accent": "#b497cf"
+    },
+    {
+      "id": "s2a-q11",
+      "topic": "Galaxies",
+      "prompt": "Based on its structure, the Milky Way is classified as what type of galaxy?",
+      "options": ["Elliptical", "Irregular", "Barred Spiral", "Lenticular"],
+      "answer": 2,
+      "note": "The Milky Way is a barred spiral galaxy.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s2a-q12",
+      "topic": "Space telescopes",
+      "prompt": "Which space telescope, launched in 1990, is renowned for its deep field images revealing thousands of galaxies?",
       "options": [
-        "Fuel low",
-        "Executive overflow — no free core sets",
-        "Radar lost",
-        "Guidance failure"
+        "James Webb Space Telescope",
+        "Spitzer Space Telescope",
+        "Hubble Space Telescope",
+        "Kepler Space Telescope"
+      ],
+      "answer": 2,
+      "note": "Hubble's deep field observations transformed our view of the distant universe.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s2a-q13",
+      "topic": "Exoplanets",
+      "prompt": "In astronomy, the \"habitable zone\" (or Goldilocks Zone) around a star is defined as the region where:",
+      "options": [
+        "Radiation levels are safe for humans",
+        "Liquid water can exist on a planet's surface",
+        "Asteroids cannot form",
+        "Gravity is exactly Earth-like"
       ],
       "answer": 1,
-      "note": "The scheduler had more jobs than core sets and shed the low-priority ones. Landing continued.",
+      "note": "The habitable zone is where temperatures may allow stable liquid water.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s2a-q14",
+      "topic": "Cosmology",
+      "prompt": "What is the name of the effect where light from a receding astronomical object is shifted to longer wavelengths?",
+      "options": ["Blueshift", "Redshift", "The Doppler limit", "Gravitational lensing"],
+      "answer": 1,
+      "note": "Receding objects show redshift as their light stretches to longer wavelengths.",
       "accent": "#b497cf"
+    },
+    {
+      "id": "s2a-q15",
+      "topic": "Orbits",
+      "prompt": "If an asteroid is described as having a highly \"eccentric\" orbit, what does that mean about its orbital path?",
+      "options": [
+        "It perfectly matches Earth's orbit",
+        "It orbits in the opposite direction of the planets",
+        "Its orbit is highly elongated or oval-shaped",
+        "It frequently changes its orbital plane"
+      ],
+      "answer": 2,
+      "note": "High eccentricity means the orbit is far from circular.",
+      "accent": "#d9bf6b"
     }
   ]
 }

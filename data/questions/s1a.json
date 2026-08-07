@@ -2,98 +2,143 @@
   "sectionId": "s1a",
   "stageId": "stage1",
   "label": "Stage 1 · Section 1",
-  "blurb": "Ten questions. Ten seconds each.",
+  "blurb": "Fifteen questions. Ten seconds each.",
   "secondsPerQuestion": 10,
   "questions": [
     {
       "id": "s1a-q1",
-      "topic": "Complexity",
-      "prompt": "Binary search over a sorted array of n items runs in",
-      "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
-      "answer": 1,
-      "note": "Each comparison throws away half of what is left, so the work grows with the number of halvings.",
-      "accent": "#ff9ffc"
+      "topic": "Space movies",
+      "prompt": "In the movie \"Interstellar,\" what is the name of the massive black hole?",
+      "options": ["Gargantua", "Cygnus X-1", "Sagittarius A*", "Event Horizon"],
+      "answer": 0,
+      "note": "In the film, Gargantua is the supermassive black hole whose extreme gravity drives time dilation.",
+      "accent": "#d9bf6b"
     },
     {
       "id": "s1a-q2",
-      "topic": "HTTP",
-      "prompt": "Signed in, still not allowed. Which status?",
-      "options": ["400 Bad Request", "401 Unauthorized", "403 Forbidden", "404 Not Found"],
-      "answer": 2,
-      "note": "401 means the server does not know who you are. 403 means it knows, and the answer is still no.",
-      "accent": "#b497cf"
+      "topic": "Space agencies",
+      "prompt": "What does the acronym ISRO stand for?",
+      "options": ["Indian Space Research Organisation", "International Space Research Organisation", "Indian Scientific Research Operations", "International Space Rescue Organization"],
+      "answer": 0,
+      "note": "ISRO is India's national space agency.",
+      "accent": "#8fa9e8"
     },
     {
       "id": "s1a-q3",
-      "topic": "JavaScript",
-      "prompt": "What does typeof null return?",
-      "options": ["\"null\"", "\"object\"", "\"undefined\"", "It throws"],
+      "topic": "Space agencies",
+      "prompt": "What does the first \"A\" in NASA stand for?",
+      "options": ["American", "Aeronautics", "Astronomy", "Aerospace"],
       "answer": 1,
-      "note": "A tagging bug from 1995 that was never fixed, because fixing it would break the web.",
-      "accent": "#d9bf6b"
+      "note": "NASA expands to National Aeronautics and Space Administration.",
+      "accent": "#ff9ffc"
     },
     {
       "id": "s1a-q4",
-      "topic": "REST",
-      "prompt": "Which method is not idempotent?",
-      "options": ["GET", "PUT", "DELETE", "POST"],
-      "answer": 3,
-      "note": "Send the same POST twice and you get two rows. PUT and DELETE land on the same end state every time.",
-      "accent": "#8fa9e8"
+      "topic": "Planets",
+      "prompt": "Which planet in our solar system is known as the \"Red Planet\"?",
+      "options": ["Venus", "Jupiter", "Mars", "Saturn"],
+      "answer": 2,
+      "note": "Mars appears red because of iron oxide on its surface.",
+      "accent": "#b497cf"
     },
     {
       "id": "s1a-q5",
-      "topic": "Git",
-      "prompt": "You pushed a broken commit to main. Safest undo?",
-      "options": ["git revert", "git reset --hard", "git commit --amend", "git rebase -i"],
-      "answer": 0,
-      "note": "revert writes a new commit that undoes the old one. The other three rewrite history everyone already pulled.",
-      "accent": "#ff9ffc"
-    },
-    {
-      "id": "s1a-q6",
-      "topic": "Networking",
-      "prompt": "Which one guarantees your packets arrive in order?",
-      "options": ["UDP", "TCP", "IP", "ICMP"],
-      "answer": 1,
-      "note": "TCP buys ordering and delivery with sequence numbers and retransmits. UDP trades both away for latency.",
-      "accent": "#b497cf"
-    },
-    {
-      "id": "s1a-q7",
-      "topic": "Floating point",
-      "prompt": "In JavaScript, 0.1 + 0.2 === 0.3 evaluates to",
-      "options": ["true", "false", "NaN", "Depends on the engine"],
-      "answer": 1,
-      "note": "Neither 0.1 nor 0.2 is exact in binary64. The sum lands at 0.30000000000000004.",
+      "topic": "Planets",
+      "prompt": "What is the largest planet in our solar system?",
+      "options": ["Earth", "Saturn", "Neptune", "Jupiter"],
+      "answer": 3,
+      "note": "Jupiter is the largest planet by both mass and volume.",
       "accent": "#d9bf6b"
     },
     {
-      "id": "s1a-q8",
-      "topic": "DNS",
-      "prompt": "A CNAME record points a name at",
-      "options": ["An IPv4 address", "An IPv6 address", "Another name", "A mail server"],
-      "answer": 2,
-      "note": "A maps a name to an address. CNAME maps a name to a name, and the resolver then chases that one.",
+      "id": "s1a-q6",
+      "topic": "Stars",
+      "prompt": "What is the closest star to Earth?",
+      "options": ["Alpha Centauri", "Proxima Centauri", "Sirius", "The Sun"],
+      "answer": 3,
+      "note": "The Sun is our local star and by far the closest to Earth.",
       "accent": "#8fa9e8"
     },
     {
-      "id": "s1a-q9",
-      "topic": "Databases",
-      "prompt": "Adding an index makes which operation slower?",
-      "options": ["SELECT by that column", "INSERT", "A join on that column", "Nothing at all"],
-      "answer": 1,
-      "note": "The index is a second structure on disk, and every insert, update, and delete has to maintain it.",
+      "id": "s1a-q7",
+      "topic": "Moon landing",
+      "prompt": "Who was the first human to walk on the Moon?",
+      "options": ["Yuri Gagarin", "Buzz Aldrin", "Neil Armstrong", "Michael Collins"],
+      "answer": 2,
+      "note": "Neil Armstrong stepped onto the Moon during Apollo 11 in 1969.",
       "accent": "#ff9ffc"
     },
     {
-      "id": "s1a-q10",
-      "topic": "Apollo",
-      "prompt": "The Apollo Guidance Computer had roughly how much RAM?",
-      "options": ["4 KB", "4 MB", "64 KB", "1 MB"],
-      "answer": 0,
-      "note": "2048 words of erasable memory, about 4 KB, and 36 KB of rope core. It landed two people on the Moon.",
+      "id": "s1a-q8",
+      "topic": "Astronomy basics",
+      "prompt": "In astronomy, a \"light-year\" is a unit of:",
+      "options": ["Time", "Distance", "Speed", "Luminosity"],
+      "answer": 1,
+      "note": "A light-year is the distance light travels in one year.",
       "accent": "#b497cf"
+    },
+    {
+      "id": "s1a-q9",
+      "topic": "Galaxies",
+      "prompt": "What is the name of the galaxy that contains our Solar System?",
+      "options": ["Andromeda", "Triangulum", "Milky Way", "Sombrero Galaxy"],
+      "answer": 2,
+      "note": "Our Solar System is in the Milky Way galaxy.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s1a-q10",
+      "topic": "Space movies",
+      "prompt": "In the movie \"The Martian,\" which crop does the protagonist grow to survive?",
+      "options": ["Corn", "Wheat", "Potatoes", "Soybeans"],
+      "answer": 2,
+      "note": "Mark Watney grows potatoes in the Hab to extend his food supply.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s1a-q11",
+      "topic": "Dwarf planets",
+      "prompt": "Which celestial body was reclassified as a \"dwarf planet\" in 2006?",
+      "options": ["Ceres", "Eris", "Pluto", "Makemake"],
+      "answer": 2,
+      "note": "In 2006, the IAU reclassified Pluto as a dwarf planet.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s1a-q12",
+      "topic": "Forces",
+      "prompt": "What fundamental force keeps the planets in orbit around the Sun?",
+      "options": ["Electromagnetism", "Strong Nuclear Force", "Gravity", "Friction"],
+      "answer": 2,
+      "note": "Gravity is the force that binds planets to their orbits.",
+      "accent": "#b497cf"
+    },
+    {
+      "id": "s1a-q13",
+      "topic": "Earth and Moon",
+      "prompt": "Which of the following is Earth's only natural satellite?",
+      "options": ["The International Space Station", "The Moon", "Halley's Comet", "Phobos"],
+      "answer": 1,
+      "note": "Earth has one natural satellite: the Moon.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s1a-q14",
+      "topic": "Orbits",
+      "prompt": "What is the general shape of Earth's orbit around the Sun?",
+      "options": ["Perfect Circle", "Elliptical", "Parabolic", "Hyperbolic"],
+      "answer": 1,
+      "note": "Earth follows an ellipse with relatively low eccentricity.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s1a-q15",
+      "topic": "Telescopes",
+      "prompt": "The James Webb Space Telescope (JWST) is primarily operated by which agency?",
+      "options": ["ISRO", "Roscosmos", "NASA", "JAXA"],
+      "answer": 2,
+      "note": "JWST is a joint mission led by NASA with ESA and CSA partners.",
+      "accent": "#ff9ffc"
     }
   ]
 }

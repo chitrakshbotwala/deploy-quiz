@@ -2,117 +2,117 @@
   "sectionId": "s1b",
   "stageId": "stage1",
   "label": "Stage 1 · Section 2",
-  "blurb": "Same clock. Harder rocks.",
+  "blurb": "Ten questions. Ten seconds each.",
   "secondsPerQuestion": 10,
   "questions": [
     {
       "id": "s1b-q1",
-      "topic": "Concurrency",
-      "prompt": "Two threads increment the same counter without a lock. This is",
-      "options": ["A deadlock", "A data race", "A memory leak", "A stack overflow"],
+      "topic": "Meteors",
+      "prompt": "What is the main difference between a meteor and a meteorite?",
+      "options": [
+        "A meteorite is larger than a meteor.",
+        "A meteor burns up in the atmosphere; a meteorite hits the ground.",
+        "A meteor is made of ice; a meteorite is made of rock.",
+        "There is no difference; they are interchangeable terms."
+      ],
       "answer": 1,
-      "note": "Unsynchronised read-modify-write on shared state is the textbook data race.",
+      "note": "A meteor is the visible streak in the atmosphere. If part of the object reaches the surface, it is a meteorite.",
       "accent": "#8fa9e8"
     },
     {
       "id": "s1b-q2",
-      "topic": "Caching",
-      "prompt": "Cache-Control: no-store means",
-      "options": [
-        "Revalidate before reuse",
-        "Never write this response to any cache",
-        "Cache for zero seconds, then reuse",
-        "Cache only in the browser"
-      ],
-      "answer": 1,
-      "note": "no-cache still stores and revalidates. no-store forbids writing it down at all.",
+      "topic": "Asteroid belt",
+      "prompt": "Where is the main asteroid belt located in our solar system?",
+      "options": ["Between Earth and Mars", "Between Jupiter and Saturn", "Between Mars and Jupiter", "Beyond Neptune"],
+      "answer": 2,
+      "note": "The main asteroid belt lies between the orbits of Mars and Jupiter.",
       "accent": "#ff9ffc"
     },
     {
       "id": "s1b-q3",
-      "topic": "Data structures",
-      "prompt": "Average lookup in a hash table with a good hash function",
-      "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
-      "answer": 0,
-      "note": "Constant on average; the worst case degrades to O(n) when every key collides.",
+      "topic": "Asteroid missions",
+      "prompt": "The NASA mission OSIRIS-REx successfully returned a sample from which near-Earth asteroid?",
+      "options": ["Ryugu", "Eros", "Bennu", "Apophis"],
+      "answer": 2,
+      "note": "OSIRIS-REx collected and returned a sample from asteroid Bennu.",
       "accent": "#d9bf6b"
     },
     {
       "id": "s1b-q4",
-      "topic": "TLS",
-      "prompt": "In HTTPS, the certificate proves",
+      "topic": "Near-Earth objects",
+      "prompt": "In astronomical terms, what classifies as a Near-Earth Object (NEO)?",
       "options": [
-        "The connection is fast",
-        "The server controls that hostname",
-        "The site is not malicious",
-        "The data is compressed"
+        "Any satellite orbiting Earth",
+        "A comet or asteroid whose orbit brings it into Earth's neighborhood",
+        "Space debris left in Low Earth Orbit",
+        "Stars located within 10 light-years of Earth"
       ],
       "answer": 1,
-      "note": "A CA attests to hostname control, nothing about the site's intentions.",
+      "note": "NEOs are comets or asteroids with orbits that approach Earth's orbital region.",
       "accent": "#b497cf"
     },
     {
       "id": "s1b-q5",
-      "topic": "Linux",
-      "prompt": "Which signal cannot be caught or ignored?",
-      "options": ["SIGTERM", "SIGINT", "SIGKILL", "SIGHUP"],
-      "answer": 2,
-      "note": "SIGKILL and SIGSTOP are handled by the kernel; the process never sees them.",
+      "topic": "Comets",
+      "prompt": "Which direction does a comet's tail always point?",
+      "options": ["Toward its destination", "Away from the Sun", "Toward the Sun", "Behind its trajectory path"],
+      "answer": 1,
+      "note": "Solar wind and radiation pressure push comet tails away from the Sun.",
       "accent": "#8fa9e8"
     },
     {
       "id": "s1b-q6",
-      "topic": "SQL",
-      "prompt": "LEFT JOIN keeps every row from",
-      "options": ["Both tables", "The left table", "The right table", "Neither table"],
+      "topic": "Astrometry",
+      "prompt": "The scientific field of \"Astrometry\" is specifically focused on:",
+      "options": [
+        "The chemical composition of stars",
+        "The precise measurement of positions and movements of celestial bodies",
+        "The study of atmospheric weather on other planets",
+        "The search for extraterrestrial intelligence"
+      ],
       "answer": 1,
-      "note": "Unmatched left rows survive with nulls on the right.",
+      "note": "Astrometry deals with accurate positions, distances, and motions of celestial objects.",
       "accent": "#ff9ffc"
     },
     {
       "id": "s1b-q7",
-      "topic": "JavaScript",
-      "prompt": "Which runs first: a promise callback or a setTimeout(0) callback?",
-      "options": ["setTimeout", "The promise callback", "Whichever was queued first", "Undefined order"],
-      "answer": 1,
-      "note": "Microtasks drain completely before the event loop takes the next macrotask.",
+      "topic": "Comet landings",
+      "prompt": "What was the first spacecraft to successfully land a probe on a comet?",
+      "options": ["Voyager 1", "Cassini", "Rosetta (Philae lander)", "New Horizons"],
+      "answer": 2,
+      "note": "ESA's Rosetta mission deployed the Philae lander onto comet 67P.",
       "accent": "#d9bf6b"
     },
     {
       "id": "s1b-q8",
-      "topic": "Distributed systems",
-      "prompt": "CAP says a partitioned system must give up",
-      "options": [
-        "Consistency or availability",
-        "Latency or throughput",
-        "Durability or isolation",
-        "Nothing, with enough replicas"
-      ],
-      "answer": 0,
-      "note": "During a partition you answer with possibly-stale data or you do not answer.",
+      "topic": "Dwarf planets",
+      "prompt": "What is the largest object in the main asteroid belt, also classified as a dwarf planet?",
+      "options": ["Vesta", "Pallas", "Hygeia", "Ceres"],
+      "answer": 3,
+      "note": "Ceres is the largest body in the main belt and is classified as a dwarf planet.",
       "accent": "#b497cf"
     },
     {
       "id": "s1b-q9",
-      "topic": "Security",
-      "prompt": "Parameterised queries defend against",
-      "options": ["XSS", "SQL injection", "CSRF", "Clickjacking"],
-      "answer": 1,
-      "note": "The value never becomes part of the parsed statement, so it cannot become syntax.",
+      "topic": "Brightness",
+      "prompt": "What scale is used to measure the brightness of celestial objects as seen from Earth?",
+      "options": ["Richter Scale", "Kelvin Scale", "Apparent Magnitude Scale", "Luminosity Index"],
+      "answer": 2,
+      "note": "Apparent magnitude describes how bright an object appears from Earth.",
       "accent": "#8fa9e8"
     },
     {
       "id": "s1b-q10",
-      "topic": "Containers",
-      "prompt": "A Docker image layer is",
+      "topic": "Meteor showers",
+      "prompt": "A \"shooting star\" is technically a:",
       "options": [
-        "A running process",
-        "A read-only filesystem diff",
-        "A network namespace",
-        "A kernel module"
+        "Fast-moving comet",
+        "Dying star",
+        "Meteor burning up in Earth's atmosphere",
+        "Asteroid passing close to Earth"
       ],
-      "answer": 1,
-      "note": "Layers stack as immutable diffs; only the container's top layer is writable.",
+      "answer": 2,
+      "note": "A shooting star is the light from a meteoroid burning as it passes through the atmosphere.",
       "accent": "#ff9ffc"
     }
   ]
