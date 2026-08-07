@@ -27,7 +27,7 @@
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 /** Where the landing page lives. The nav's in-page anchors resolve against it. */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://deployorreadacted.vercel.app').replace(
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://dor.gdgkiit.in').replace(
   /\/$/,
   ''
 );
