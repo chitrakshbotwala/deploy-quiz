@@ -1,0 +1,739 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-google-blue: #4285f4;
+  --color-google-red: #ea4335;
+  --color-google-yellow: #fbbc05;
+  --color-google-green: #34a853;
+  /* Site accents matched to the backgrounds: PixelBlast purple + GridScan pink */
+  --color-blast-purple: #b497cf;
+  --color-scan-pink: #ff9ffc;
+  --color-space: #050510;
+  --color-space-soft: #0b0b1e;
+  /* Footer palette. The footer runs its own darker, warmer surface than the
+     journey above it, and a deeper pink than --color-scan-pink. */
+  --color-gdg-pink: #ec4ba7;
+  /* Quiz correctness signals. Deliberately the muted greens/reds the event
+     accents already live in rather than google-green/google-red: a saturated
+     #34a853 pass bar next to a #6FBF97 asteroid reads as two different sites.
+     Kept OUT of the per-question accent rotation in quizQuestions.ts, so a lit
+     answer row never wears the same hue as "correct". */
+  --color-signal-ok: #6fbf97;
+  --color-signal-off: #db8079;
+  --color-footer-line: #1e1e2b;
+  --color-footer-ink: #c9c9d6;
+  --color-footer-link: #c2c2d0;
+  --color-footer-label: #6b6b7e;
+  --color-footer-meta: #7a7a8c;
+  /* Type: Archivo carries display + body, Space Grotesk the footer's UI text,
+     JetBrains Mono labels/meta.
+     The families are not named literally here — they are the variables
+     `next/font` emits in app/layout.tsx, which self-hosts the files and gives
+     each one a hashed family name. Naming 'Archivo' directly would silently fall
+     through to the system stack, because nothing on the page ever loads a font
+     by that name. */
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-grotesk: var(--font-grotesk-src), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, 'SFMono-Regular', monospace;
+}
+
+/* ── Giant footer wordmark ────────────────────────────────────────────────────
+   Each letter is a neon tube. `--on` is its charge: 0 is a dead tube (one solid
+   neutral tinted toward the page's blue-violet, no glow), 1 is fully struck. Fill
+   and all four glow stops are derived from that one scalar, so hover and the
+   first-sight strike animation drive the same dimmer instead of duplicating a
+   colour stack. It has to be @property-registered — an unregistered custom
+   property is a string and animates in discrete jumps.
+
+   The glow is a four-stop falloff rather than one blur: a hairline core that
+   reads as the tube wall, a tight halo, a mid bloom, and a wide dim spill. */
+@property --on {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+.wordmark-letter {
+  --on: 0;
+  /* The fill runs hotter than the glow — a lit tube's core is close to white,
+     and the hue lives in the spill around it.
+     The dimmer mix is `oklab`, not `oklch`: oklch interpolates hue on a polar
+     path, so at --on 0 the dead tube came out carrying the lit hue (a red D, a
+     green K) instead of landing on the neutral. oklab is rectangular and hits
+     #17171f exactly at zero, so every unlit letter is the same grey. */
+  color: color-mix(in oklab, color-mix(in oklch, var(--lit) 92%, white) calc(var(--on) * 100%), #17171f);
+  /* Radii are in `em`, not px: this wordmark runs 52px on a phone and 230px on a
+     desktop, and a fixed 64px spill that halos the small one barely clears the
+     stroke on the large one. */
+  text-shadow:
+    0 0 0.015em color-mix(in oklch, var(--lit) calc(var(--on) * 90%), transparent),
+    0 0 0.07em color-mix(in oklch, var(--lit) calc(var(--on) * 62%), transparent),
+    0 0 0.22em color-mix(in oklch, var(--lit) calc(var(--on) * 34%), transparent),
+    0 0 0.55em color-mix(in oklch, var(--lit) calc(var(--on) * 18%), transparent);
+  /* Every tube starts below its line and dark, and rides up when the sign is
+     first seen. No clip mask on the way up: the glow IS a text-shadow, and an
+     overflow box tight enough to hide a rising letter shears its halo off. So
+     the rise is transform and opacity only, and it runs concurrently with the
+     strike below rather than before it — the sign swings up already sputtering,
+     which reads as one arrival instead of two.
+     `--i` staggers the tubes. The delay is attached to transform and opacity
+     alone, never to `--on`: a hover that takes 400ms to acknowledge the pointer
+     because it inherited the eighth letter's stagger is a broken hover. */
+  opacity: 0;
+  transform: translateY(0.16em);
+  /* Asymmetric on purpose: slow here (the cool-down), overridden short on hover
+     (the strike). Gas does not let go of its charge as fast as it takes it. */
+  transition:
+    --on 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 620ms linear calc(var(--i, 0) * 55ms),
+    transform 780ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--i, 0) * 55ms);
+}
+
+.wordmark-strike .wordmark-letter {
+  opacity: 1;
+  transform: none;
+}
+
+/* A word lights on hover. Two shapes carry it:
+   KIIT — a plain group; hovering lights all four tubes in the row (the catch).
+   GDG  — a `.wordmark-word`; hovering does NOT light the in-row cap. The cap
+          lifts off the row and names itself in full above the line instead (the
+          raised-word block below), so the row-light is scoped to KIIT and to the
+          raised clone, never to a GDG in-row cap.
+   `--on: 1` is the held state; `wordmark-catch` further down owns how it gets
+   there. The transition stays declared because it is what runs on the way back
+   out, and it is the whole hover in reduced-motion mode where the catch is off. */
+.wordmark-letter:hover,
+.wordmark-kiit:hover .wordmark-letter,
+.wordmark-word:hover .wordmark-raised .wordmark-letter {
+  --on: 1;
+  transition-duration: 140ms;
+}
+
+/* ── Hover: the cap lifts and names itself ────────────────────────────────────
+   G → Google, D → Developer, G → Group. The old design unfurled the tail inline
+   at a fifth of the cap size — a footnote welded to a letter, and "Developer" at
+   the cap's own size is wider than the band, so it could never grow up to match.
+   This lifts instead. On hover the in-row cap fades out and a full-size clone
+   rises off the baseline, shrinking to a uniform mid size as it climbs; the rest
+   of the word writes itself beside it at that same size. The word is now ONE size
+   (no 5:1 break), it sits on its own clear line above the sign (the footer
+   reserves the band), and nothing in the row reflows — the clone is absolutely
+   positioned, so the D-slot keeps its width and the neighbours never move. */
+.wordmark-word {
+  display: inline-block;
+  position: relative;
+}
+
+/* The in-row cap. It crossfades out as the clone takes over, so the single G
+   reads as lifting rather than duplicating. Transform/opacity only — its layout
+   box stays, which is what holds the row open where the letter used to be.
+
+   It does not fade any more, in either direction — it is switched. The clone
+   that replaces it starts out identical to it (see `.wordmark-raised`), so
+   hiding one and showing the other in the same frame is invisible, and any fade
+   at all would be two copies of the same glyph at partial alpha: a dip in
+   brightness where the eye expects a solid letter. Going out the switch is
+   immediate; coming back it waits 520ms, the exact length of the clone's descent,
+   so the row is refilled at the instant the travelling letter arrives on it.
+   Earlier versions eased this fade because the clone was landing somewhere else
+   entirely — with the letter coming home to this exact box, the ease belongs to
+   the travel, not to the handover. */
+.wordmark-cap {
+  transition:
+    --on 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0s linear 520ms;
+}
+.wordmark-word:hover .wordmark-cap {
+  opacity: 0;
+  transition:
+    --on 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0s;
+}
+/* The cap stays dark for as long as the word is up. It is a `.wordmark-letter`
+   sitting directly under the pointer, so the generic `:hover` light claimed it
+   too — and with the fade-in now landing mid-decay, what came back was a lit
+   blue ghost dimming under the word that was leaving. The raised clone is what
+   carries the charge; the cap only fades. Specificity clears
+   `.wordmark-letter:hover` outright rather than relying on source order. The
+   first-sight strike is unaffected — an animation outranks any declaration. */
+.wordmark-word .wordmark-cap.wordmark-letter {
+  --on: 0;
+}
+
+/* The raised clone — and the reason it is a clone at all is that its REST state
+   is the in-row cap: same font-size, same left edge, same baseline, sitting
+   exactly on top of it. Nothing crossfades between two sizes any more. The clone
+   is revealed and the in-row cap hidden in the same frame, an invisible swap
+   because the two are pixel-identical, and then the SAME letter you were looking
+   at climbs and shrinks to the raised line in one move. Previously the clone was
+   born at `font-size: 0.62em`, so the giant G in the row handed off to a much
+   smaller G already up on the line: the size changed in one frame and the eye
+   read a snap, not a lift.
+
+   The shrink is `scale()`, not `font-size` — a font-size cannot be interpolated
+   without relayout on every frame, and the earlier attempt at scaling was only
+   "cooked" because it scaled a clone that had ALREADY jumped size. Scaling from
+   1 is the honest version: 0.62 is the largest uniform size at which the longest
+   word, "Developer", still clears the band at every desktop width, and the row's
+   own caps are never touched. Glow radii are in `em`, so they scale with the
+   letter and the tube keeps its proportions the whole way up.
+
+   `-0.93em` puts the scaled box bottom exactly where the old 0.62em box sat once
+   lifted, so the raised line has not moved. `transform-origin: left bottom` is
+   what makes the two ends line up: the scale collapses toward the cap's own
+   baseline-left, which is the point the letter is pivoting about. Absolute +
+   pointer-events:none holds it out of layout and hit-testing (the group owns the
+   hover).
+
+   Opacity is a hard cut in both directions — `0s`, and on the way out delayed to
+   the exact moment the clone lands back on the in-row cap. A crossfade between
+   two identical glyphs is not a crossfade, it is a dip in brightness. */
+.wordmark-raised {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  white-space: nowrap;
+  letter-spacing: normal;
+  transform-origin: left bottom;
+  transform: none;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0s linear 520ms;
+}
+.wordmark-word:hover .wordmark-raised {
+  opacity: 1;
+  transform: translateY(-0.93em) scale(0.62);
+  transition:
+    transform 560ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0s;
+}
+
+/* Raised letters carry the neon (colour/glow from `--on`) but never the rise or
+   the strike — they exist only while hovered. The cap is the first child and
+   lights as it lifts; each following letter is a tail letter.
+
+   The cool-down is cut to the descent (520ms) rather than the letters' own 460ms
+   default, and it has to end dark: the clone hands back to an in-row cap that is
+   never lit, so any charge still in the tube at the moment of the swap would show
+   as a step down in brightness on a letter that is otherwise standing still. */
+.wordmark-raised .wordmark-letter {
+  opacity: 1;
+  transform: none;
+  animation: none;
+  transition: --on 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Tail letters fade in one at a time so the word writes itself out after the cap.
+   `--jr` walks it left to right; the small base delay lets the cap register first.
+   The same delay drives the per-letter catch below, so each letter writes and
+   strikes on the same beat. */
+.wordmark-raised .wordmark-tail-letter {
+  opacity: 0;
+  transition: opacity 180ms linear;
+}
+.wordmark-word:hover .wordmark-raised .wordmark-tail-letter {
+  opacity: 1;
+  transition-delay: calc(90ms + var(--jr, 0) * 40ms);
+}
+
+/* ── First-sight strike ───────────────────────────────────────────────────────
+   The sign has been sitting in the dark at the bottom of the page. When it first
+   scrolls into view it tries to come on: a burst of dropouts, a moment where it
+   holds, then a starved decay where it keeps grabbing at the charge and losing
+   it. It never stays lit — it settles back to the dead tube, and hover is what
+   brings it up cleanly afterwards. That's the reward for reaching the end of the
+   journey, not a loop running forever in the corner of the eye.
+
+   Three variants, dealt at random per letter along with a random delay and
+   duration, so no two tubes fail on the same schedule. `steps(1)` on the blips:
+   a striking tube snaps, it does not crossfade. The long tails ease.
+   No fill-mode — when it ends the cascade takes over again, so hover is live and
+   nothing is left pinned by the animation. */
+@keyframes wordmark-strike-a {
+  0%, 3%    { --on: 0;    animation-timing-function: steps(1, end); }
+  4%        { --on: 1;    animation-timing-function: steps(1, end); }
+  6%        { --on: 0;    animation-timing-function: steps(1, end); }
+  9%        { --on: 0.85; animation-timing-function: steps(1, end); }
+  11%, 18%  { --on: 0;    animation-timing-function: steps(1, end); }
+  19%       { --on: 1;    animation-timing-function: steps(1, end); }
+  21%       { --on: 0.08; animation-timing-function: steps(1, end); }
+  23%, 44%  { --on: 1;    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+  52%       { --on: 0.22; animation-timing-function: steps(1, end); }
+  54%, 62%  { --on: 0.9;  animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+  70%       { --on: 0.1;  animation-timing-function: steps(1, end); }
+  72%       { --on: 0.62; animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+  100%      { --on: 0; }
+}
+
+@keyframes wordmark-strike-b {
+  0%, 8%    { --on: 0;    animation-timing-function: steps(1, end); }
+  9%        { --on: 0.7;  animation-timing-function: steps(1, end); }
+  10%, 14%  { --on: 0;    animation-timing-function: steps(1, end); }
+  15%       { --on: 1;    animation-timing-function: steps(1, end); }
+  17%       { --on: 0.05; animation-timing-function: steps(1, end); }
+  18%       { --on: 0.95; animation-timing-function: steps(1, end); }
+  20%, 30%  { --on: 0;    animation-timing-function: steps(1, end); }
+  31%, 48%  { --on: 1;    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+  56%       { --on: 0.4;  animation-timing-function: steps(1, end); }
+  58%       { --on: 1;    animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+  76%       { --on: 0.18; animation-timing-function: steps(1, end); }
+  78%       { --on: 0.45; animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+  100%      { --on: 0; }
+}
+
+/* Catches immediately, then fails hardest — this one has the longest struggle. */
+@keyframes wordmark-strike-c {
+  0%        { --on: 0;    animation-timing-function: steps(1, end); }
+  2%, 12%   { --on: 1;    animation-timing-function: steps(1, end); }
+  14%       { --on: 0;    animation-timing-function: steps(1, end); }
+  17%       { --on: 0.55; animation-timing-function: steps(1, end); }
+  19%       { --on: 0;    animation-timing-function: steps(1, end); }
+  26%       { --on: 1;    animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+  40%       { --on: 0.75; animation-timing-function: steps(1, end); }
+  42%       { --on: 0.12; animation-timing-function: steps(1, end); }
+  44%, 58%  { --on: 0.95; animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+  66%       { --on: 0.3;  animation-timing-function: steps(1, end); }
+  68%       { --on: 0.8;  animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+  84%       { --on: 0.14; animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+  100%      { --on: 0; }
+}
+
+/* `wordmark-firing` is a SEPARATE class from `wordmark-strike` (which owns the
+   rise) and the component drops it once the last tube has given up.
+   Why it cannot ride on `wordmark-strike`: hover sets `animation-name` to
+   `wordmark-catch`, and CSS matches running animations to the name list by
+   index — so un-hovering changed index 0 from `wordmark-catch` back to
+   `wordmark-strike-a`, which is a NEW animation, and the browser dutifully
+   replayed the entire three-second broken-neon sputter. Every time the pointer
+   left a word, the whole sign started failing again. Retiring the class means
+   animation-name at rest is `none`, so hover toggles none → catch → none and
+   the strike is what its comment always claimed: once, on first sight. */
+.wordmark-firing .wordmark-letter {
+  animation: var(--strike) var(--strike-dur) var(--strike-delay);
+}
+
+/* Raised-word letters never flicker: they exist only on hover, and the strike is
+   a first-sight event on the in-row tubes. Higher specificity than
+   `.wordmark-firing .wordmark-letter`, so it wins regardless of source order. */
+.wordmark-firing .wordmark-raised .wordmark-letter {
+  animation: none;
+}
+
+/* ── Hover catch ──────────────────────────────────────────────────────────────
+   Hover used to be a 140ms ramp on `--on`. The sign spends four seconds telling
+   you these are gas tubes that snap and drop out, then lit like a dimmer being
+   turned up — the interaction contradicted the object.
+
+   So hover strikes too: a pre-glow as the charge builds, one dropout, then it
+   catches and settles. Same `steps(1)` vocabulary as the first-sight strike,
+   spent in 220ms instead of three seconds, because this is feedback and the
+   pointer is already there.
+
+   The dropout only goes to 0.06, never to true dark. Sweeping a pointer across
+   the whole sign fires this four times in a row, and a full blackout per word
+   turns a sweep into a glitch; a deep dim reads as a ripple running down it.
+
+   Fill is `backwards`, NOT `both`, and the difference is the whole cool-down.
+   Backwards holds the pre-glow through the stagger delay, so a tube waiting its
+   turn is already charging rather than dead. Forwards would pin the lit value as
+   an animated value — and a property leaving an animated value does not
+   transition, it snaps, so the 460ms decay silently became 0ms. With backwards
+   only, the animation ends and hands off to the `--on: 1` the hover rule already
+   declares (same number, no visible seam); un-hovering then changes a plain
+   declared value from 1 to 0, which is exactly what the transition listens for. */
+@keyframes wordmark-catch {
+  0%   { --on: 0.3;  animation-timing-function: steps(1, end); }
+  26%  { --on: 0.06; animation-timing-function: steps(1, end); }
+  44%  { --on: 1;    animation-timing-function: steps(1, end); }
+  62%  { --on: 0.58; animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  100% { --on: 1; }
+}
+
+/* KIIT lights as a word: `--j` (0..3) runs the charge K→I→I→T at 34ms apart,
+   never all on one flat frame. */
+.wordmark-kiit:hover .wordmark-letter {
+  animation: wordmark-catch 220ms steps(1, end) calc(var(--j, 0) * 34ms) backwards;
+}
+
+/* Once the word is fully written it sputters once, like a neon sign settling on
+   its charge — a couple of hard dropouts, then it holds lit. `steps(1)` so the
+   tube snaps rather than crossfades; ends on `--on: 1`, and `backwards` fill (not
+   forwards) keeps it from pinning an animated value, so the un-hover cool-down
+   still transitions cleanly. */
+@keyframes wordmark-hover-flicker {
+  0%,  38%  { --on: 1;    animation-timing-function: steps(1, end); }
+  41%       { --on: 0.12; animation-timing-function: steps(1, end); }
+  44%       { --on: 1;    animation-timing-function: steps(1, end); }
+  49%       { --on: 0.5;  animation-timing-function: steps(1, end); }
+  52%       { --on: 1;    animation-timing-function: steps(1, end); }
+  74%       { --on: 1;    animation-timing-function: steps(1, end); }
+  77%       { --on: 0.08; animation-timing-function: steps(1, end); }
+  80%       { --on: 1;    }
+  100%      { --on: 1; }
+}
+
+/* The raised word writes with the catch, then flickers once it is whole. The cap
+   (first child) strikes immediately as it lifts; each tail letter strikes on the
+   beat its fade-in lands, so the letter never appears already-lit — it arrives
+   striking. The flicker is the SECOND animation, delayed past the whole word's
+   reveal (~650ms), a hair of `--jr` stagger so the tubes sputter in a ripple
+   rather than one flat blink. */
+.wordmark-word:hover .wordmark-raised > .wordmark-letter:first-child {
+  animation:
+    wordmark-catch 220ms steps(1, end) backwards,
+    wordmark-hover-flicker 720ms steps(1, end) 650ms backwards;
+}
+.wordmark-word:hover .wordmark-raised .wordmark-tail-letter {
+  animation:
+    wordmark-catch 220ms steps(1, end) calc(90ms + var(--jr, 0) * 40ms) backwards,
+    wordmark-hover-flicker 720ms steps(1, end) calc(650ms + var(--jr, 0) * 22ms) backwards;
+}
+
+/* Phone (the < 768px layout branch, same breakpoint Footer splits on). The tubes
+   light here too — that is the whole object — but the raised word does not come
+   with them: the band the lifted word needs is never opened at this width
+   (`reserve` is 0), and "Developer" at a uniform size does not fit across 390px
+   anyway. So the clones are removed and the sign is a sign you can strike.
+
+   `:hover` is not the trigger. A tap latches it, so a hovered word would sit lit
+   until something else was touched, and the latch also survives the finger
+   leaving — neither reads as pressing a switch. Every hover rule is therefore
+   neutralised at this width and `.wordmark-lit`, which Footer.tsx puts on the
+   word under the finger and takes off on release, drives the light instead. */
+@media (max-width: 767px) {
+  .wordmark-raised {
+    display: none;
+  }
+  .wordmark-word:hover .wordmark-cap {
+    opacity: 1;
+  }
+  .wordmark-letter:hover,
+  .wordmark-kiit:hover .wordmark-letter {
+    --on: 0;
+    animation: none;
+  }
+
+  /* Same catch as the pointer gets, same 34ms charge running K→I→I→T, and the
+     un-lit decay is the letters' own 460ms cool-down — the class comes off and
+     the declared value goes back to 0, which is what the transition listens for.
+     Ties on specificity with the neutralising rules above, so it has to come
+     after them in source order. */
+  .wordmark-kiit.wordmark-lit .wordmark-letter {
+    --on: 1;
+    animation: wordmark-catch 220ms steps(1, end) calc(var(--j, 0) * 34ms) backwards;
+  }
+
+  /* The in-row cap is what lights for GDG, since there is no clone to hand the
+     charge to. It has to out-specify `.wordmark-word .wordmark-cap.wordmark-letter`,
+     which pins the cap dark for the desktop lift.
+
+     The catch is the only animation here, exactly as KIIT runs it — no stagger,
+     because a GDG word is one tube. It used to be chased by a delayed
+     `wordmark-hover-flicker`, and that flicker is why the cap simply snapped on:
+     two animations touching `--on` means the LAST one wins wherever it applies,
+     and `backwards` fill applies from the first frame, so its opening `--on: 1`
+     sat on top of the whole catch. The tube lit flat and the strike played
+     underneath, invisible. */
+  .wordmark-word.wordmark-lit .wordmark-cap.wordmark-letter {
+    --on: 1;
+    animation: wordmark-catch 220ms steps(1, end) backwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Nothing eases: the sign is simply already up when first seen, and on hover
+     the raised word is simply there, in place, at its settled size — no lift, no
+     write. Both end states are kept: suppressing the motion must not suppress the
+     meaning, and the raised word is the only place the acronym is spelled out. */
+  .wordmark-letter,
+  .wordmark-cap,
+  .wordmark-raised,
+  .wordmark-raised .wordmark-tail-letter {
+    transition: none;
+  }
+  /* No strike at all: a flickering 230px wordmark is exactly the kind of motion
+     this query exists to suppress. The tube just stays dark until hover. */
+  .wordmark-firing .wordmark-letter {
+    animation: none;
+  }
+  /* Nor any catch — same flicker, just shorter. `--on: 1` from the hover rule
+     still applies, so the word is simply lit while pointed at. */
+  .wordmark-kiit:hover .wordmark-letter,
+  .wordmark-word:hover .wordmark-raised > .wordmark-letter:first-child,
+  .wordmark-word:hover .wordmark-raised .wordmark-tail-letter,
+  .wordmark-kiit.wordmark-lit .wordmark-letter,
+  .wordmark-word.wordmark-lit .wordmark-cap.wordmark-letter {
+    animation: none;
+  }
+}
+
+/* Outlined display glyphs (the "DIE" in the hero) — fill transparent, stroke only. */
+.text-outline {
+  color: transparent;
+  -webkit-text-stroke: 2px oklch(1 0 0 / 0.4);
+}
+@media (min-width: 768px) {
+  .text-outline { -webkit-text-stroke-width: 3px; }
+}
+
+html,
+body {
+  background: var(--color-space);
+  color: #e8eaed;
+  overflow-x: hidden;
+  font-family: var(--font-sans);
+  font-feature-settings: 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hide scrollbars entirely (scrolling still works — ScrollSmoother/native wheel/touch) */
+html {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* Drifting accent blobs behind the fullscreen event panel's blur layer.
+   Transform-only (no layout props). Each blob gets its own slow loop. */
+@keyframes blob-drift-a {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  33%  { transform: translate3d(8vw, 6vh, 0) scale(1.18); }
+  66%  { transform: translate3d(-6vw, 10vh, 0) scale(0.9); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes blob-drift-b {
+  0%   { transform: translate3d(0, 0, 0) scale(1.1); }
+  40%  { transform: translate3d(-10vw, -8vh, 0) scale(0.85); }
+  75%  { transform: translate3d(7vw, -4vh, 0) scale(1.25); }
+  100% { transform: translate3d(0, 0, 0) scale(1.1); }
+}
+@keyframes blob-drift-c {
+  0%   { transform: translate3d(0, 0, 0) scale(0.95); }
+  50%  { transform: translate3d(9vw, -9vh, 0) scale(1.3); }
+  100% { transform: translate3d(0, 0, 0) scale(0.95); }
+}
+
+/* Right-click menu entrance: pop from the cursor corner with a slight rise. */
+@keyframes context-menu-in {
+  0%   { opacity: 0; transform: scale(0.94) translateY(-4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.context-menu-in {
+  transform-origin: top left;
+  animation: context-menu-in 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-menu-in { animation: none; }
+}
+
+/* ── Quiz answer rows ─────────────────────────────────────────────────────────
+   An answer is a tube, struck exactly the way the footer wordmark is struck.
+   Same `--on` scalar (registered once, up top), same derived fill-and-four-stop
+   glow, same `wordmark-catch` keyframes reused verbatim rather than copied: a
+   pointer landing on an answer and a pointer landing on a neon letter are the
+   same physical event, and the site should only own one vocabulary for it.
+
+   `--lit` is what changes underneath. While a question is live it is the
+   question's own accent, so hovering the options tints them in whatever hue the
+   asteroid ahead of you is lit in. The moment a pick lands, `--lit` is swapped
+   to a signal colour and the row either catches (correct) or catches and starves
+   out (wrong).
+
+   Rows are hairline-separated, full width. No coloured left edge: a 3px accent
+   stripe down the side of a list row is the tell of a template, and the row here
+   already carries its state in the glow of its own key letter. */
+.quiz-answer {
+  --on: 0;
+  --lit: #ff9ffc;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 0.85rem 0.9rem 0.85rem 0.25rem;
+  text-align: left;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  /* The tint is derived from the same scalar as the glow, so a row cannot be
+     lit-but-untinted at any point in the interpolation. oklab, not oklch: at
+     --on 0 a polar path leaves a ghost of the hue behind on a row that is
+     supposed to be plain. */
+  background: color-mix(in oklab, var(--lit) calc(var(--on) * 12%), transparent);
+  transition:
+    --on 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.quiz-answer:last-child {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+/* The key letter is the tube itself. Radii in `em` so the glow keeps its
+   proportions between the phone's 0.8rem key and the desktop's. */
+.quiz-answer .quiz-key {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.24em;
+  color: color-mix(in oklab, color-mix(in oklch, var(--lit) 92%, white) calc(var(--on) * 100%), #4a4a5a);
+  text-shadow:
+    0 0 0.06em color-mix(in oklch, var(--lit) calc(var(--on) * 80%), transparent),
+    0 0 0.3em color-mix(in oklch, var(--lit) calc(var(--on) * 46%), transparent),
+    0 0 0.9em color-mix(in oklch, var(--lit) calc(var(--on) * 22%), transparent);
+  transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.quiz-answer .quiz-label {
+  color: color-mix(in oklab, white calc(72% + var(--on) * 28%), transparent);
+  transition: color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Correct/incorrect glyph. Only rendered once a pick has landed. */
+/* The verdict glyph. It is the one part of the row that must stay legible even
+   on the starved wrong answer, so its floor is high and only the top of its
+   range is tied to the charge. */
+.quiz-answer .quiz-mark {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--lit);
+  opacity: calc(0.6 + var(--on) * 0.4);
+}
+
+/* Armed rows only. `:not([disabled])` rather than a state class so a row that
+   has been locked by React cannot be re-lit by a stray pointer. */
+.quiz-answer:not([disabled]):hover,
+.quiz-answer:not([disabled]):focus-visible {
+  --on: 0.44;
+}
+.quiz-answer:not([disabled]):active {
+  --on: 0.7;
+}
+
+/* The pick. Catch is the footer's 220ms strike: a pre-glow, one dropout, then it
+   holds. `backwards` fill, never `forwards` — the same reason it is backwards on
+   the wordmark, so the row hands off to the declared `--on: 1` instead of
+   pinning an animated value. */
+.quiz-answer[data-state='correct'] {
+  --lit: var(--color-signal-ok);
+  --on: 1;
+  animation: wordmark-catch 220ms steps(1, end) backwards;
+}
+
+/* A wrong pick catches too, then starves. It has to end dark-ish rather than
+   dead: the row still has to be readable as "this is the one you chose" after
+   the light goes. `forwards` is correct here and only here, because the row is
+   terminal — it is disabled for the rest of the question, so nothing later
+   depends on transitioning off the animated value. */
+@keyframes quiz-starve {
+  0%   { --on: 0.3;  animation-timing-function: steps(1, end); }
+  18%  { --on: 0.06; animation-timing-function: steps(1, end); }
+  30%  { --on: 1;    animation-timing-function: steps(1, end); }
+  46%  { --on: 1;    animation-timing-function: steps(1, end); }
+  54%  { --on: 0.08; animation-timing-function: steps(1, end); }
+  62%  { --on: 0.74; animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+  78%  { --on: 0.12; animation-timing-function: steps(1, end); }
+  84%  { --on: 0.5;  animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+  100% { --on: 0.34; }
+}
+.quiz-answer[data-state='wrong'] {
+  --lit: var(--color-signal-off);
+  animation: quiz-starve 900ms forwards;
+}
+
+/* The right answer, revealed after a wrong pick. It does NOT strike: nobody
+   struck it. It simply comes up, and it waits out the wrong row's failure first
+   (900ms) so the two are read in order rather than as one flat state change. */
+.quiz-answer[data-state='reveal'] {
+  --lit: var(--color-signal-ok);
+  --on: 0.85;
+  transition: --on 520ms cubic-bezier(0.22, 1, 0.36, 1) 760ms;
+}
+
+/* Everything not involved in the outcome recedes so the two lit rows carry it. */
+.quiz-answer[data-state='muted'] .quiz-label {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+/* ── Result score ─────────────────────────────────────────────────────────────
+   The score is one huge tube, lit once on arrival. Same derivation as the
+   wordmark; the glow radii are heavier because the glyph is far larger and a
+   0.07em halo on a 14rem numeral is invisible. */
+.quiz-score {
+  --on: 0;
+  --lit: var(--color-scan-pink);
+  color: color-mix(in oklab, color-mix(in oklch, var(--lit) 94%, white) calc(var(--on) * 100%), #17171f);
+  text-shadow:
+    0 0 0.012em color-mix(in oklch, var(--lit) calc(var(--on) * 90%), transparent),
+    0 0 0.06em color-mix(in oklch, var(--lit) calc(var(--on) * 58%), transparent),
+    0 0 0.18em color-mix(in oklch, var(--lit) calc(var(--on) * 32%), transparent),
+    0 0 0.46em color-mix(in oklch, var(--lit) calc(var(--on) * 16%), transparent);
+}
+.quiz-score-lit {
+  --on: 1;
+  animation: wordmark-catch 340ms steps(1, end) 260ms backwards;
+}
+
+/* Scrolling regions inside a quiz panel. The bar is hidden for the same reason
+   it is hidden on `html` site-wide, and by the same rule: the bar goes, the
+   scrolling never does. */
+.quiz-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.quiz-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* Run progress. A hairline that fills, not a rounded pill with a percentage
+   inside it — the telemetry rail it sits in is made of hairlines already. */
+.quiz-progress {
+  transform-origin: 0% 50%;
+  transition: transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* End states only, in every case: the correct row is still lit, the wrong row
+     is still dim, the score is still on. Only the striking goes. */
+  .quiz-answer,
+  .quiz-answer .quiz-key,
+  .quiz-answer .quiz-label,
+  .quiz-progress {
+    transition: none;
+  }
+  .quiz-answer[data-state='correct'],
+  .quiz-score-lit {
+    animation: none;
+  }
+  .quiz-answer[data-state='wrong'] {
+    animation: none;
+    --on: 0.34;
+  }
+  .quiz-answer[data-state='reveal'] {
+    transition: none;
+  }
+}
+
+.blob-a { animation: blob-drift-a 26s ease-in-out infinite; }
+.blob-b { animation: blob-drift-b 32s ease-in-out infinite; }
+.blob-c { animation: blob-drift-c 22s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .blob-a,
+  .blob-b,
+  .blob-c {
+    animation: none;
+  }
+}

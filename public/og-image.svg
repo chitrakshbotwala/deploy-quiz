@@ -1,0 +1,15 @@
+<!-- PLACEHOLDER OG image. Replace with a real 1200x630 PNG (og-image.png) and update index.html. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#050510"/>
+  <circle cx="180" cy="120" r="2" fill="#B497CF" opacity="0.8"/>
+  <circle cx="920" cy="90" r="2.5" fill="#ffffff" opacity="0.5"/>
+  <circle cx="1050" cy="480" r="2" fill="#FF9FFC" opacity="0.7"/>
+  <circle cx="300" cy="500" r="1.5" fill="#B497CF" opacity="0.6"/>
+  <circle cx="640" cy="200" r="1.5" fill="#ffffff" opacity="0.4"/>
+  <circle cx="960" cy="300" r="60" fill="#1a1a2e" stroke="#B497CF" stroke-width="4"/>
+  <text x="80" y="300" font-family="sans-serif" font-size="72" font-weight="700" fill="#ffffff">DEPLOY OR DIE</text>
+  <text x="80" y="380" font-family="sans-serif" font-size="40" fill="#9aa0a6">GDG KIIT — 3 Events, One Journey</text>
+  <rect x="80" y="430" width="60" height="8" rx="4" fill="#B497CF"/>
+  <rect x="150" y="430" width="60" height="8" rx="4" fill="#FF9FFC"/>
+  <rect x="220" y="430" width="60" height="8" rx="4" fill="#8F7AE5"/>
+</svg>
