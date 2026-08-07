@@ -1,0 +1,119 @@
+{
+  "sectionId": "s1b",
+  "stageId": "stage1",
+  "label": "Stage 1 · Section 2",
+  "blurb": "Same clock. Harder rocks.",
+  "secondsPerQuestion": 10,
+  "questions": [
+    {
+      "id": "s1b-q1",
+      "topic": "Concurrency",
+      "prompt": "Two threads increment the same counter without a lock. This is",
+      "options": ["A deadlock", "A data race", "A memory leak", "A stack overflow"],
+      "answer": 1,
+      "note": "Unsynchronised read-modify-write on shared state is the textbook data race.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s1b-q2",
+      "topic": "Caching",
+      "prompt": "Cache-Control: no-store means",
+      "options": [
+        "Revalidate before reuse",
+        "Never write this response to any cache",
+        "Cache for zero seconds, then reuse",
+        "Cache only in the browser"
+      ],
+      "answer": 1,
+      "note": "no-cache still stores and revalidates. no-store forbids writing it down at all.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s1b-q3",
+      "topic": "Data structures",
+      "prompt": "Average lookup in a hash table with a good hash function",
+      "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
+      "answer": 0,
+      "note": "Constant on average; the worst case degrades to O(n) when every key collides.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s1b-q4",
+      "topic": "TLS",
+      "prompt": "In HTTPS, the certificate proves",
+      "options": [
+        "The connection is fast",
+        "The server controls that hostname",
+        "The site is not malicious",
+        "The data is compressed"
+      ],
+      "answer": 1,
+      "note": "A CA attests to hostname control, nothing about the site's intentions.",
+      "accent": "#b497cf"
+    },
+    {
+      "id": "s1b-q5",
+      "topic": "Linux",
+      "prompt": "Which signal cannot be caught or ignored?",
+      "options": ["SIGTERM", "SIGINT", "SIGKILL", "SIGHUP"],
+      "answer": 2,
+      "note": "SIGKILL and SIGSTOP are handled by the kernel; the process never sees them.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s1b-q6",
+      "topic": "SQL",
+      "prompt": "LEFT JOIN keeps every row from",
+      "options": ["Both tables", "The left table", "The right table", "Neither table"],
+      "answer": 1,
+      "note": "Unmatched left rows survive with nulls on the right.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s1b-q7",
+      "topic": "JavaScript",
+      "prompt": "Which runs first: a promise callback or a setTimeout(0) callback?",
+      "options": ["setTimeout", "The promise callback", "Whichever was queued first", "Undefined order"],
+      "answer": 1,
+      "note": "Microtasks drain completely before the event loop takes the next macrotask.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s1b-q8",
+      "topic": "Distributed systems",
+      "prompt": "CAP says a partitioned system must give up",
+      "options": [
+        "Consistency or availability",
+        "Latency or throughput",
+        "Durability or isolation",
+        "Nothing, with enough replicas"
+      ],
+      "answer": 0,
+      "note": "During a partition you answer with possibly-stale data or you do not answer.",
+      "accent": "#b497cf"
+    },
+    {
+      "id": "s1b-q9",
+      "topic": "Security",
+      "prompt": "Parameterised queries defend against",
+      "options": ["XSS", "SQL injection", "CSRF", "Clickjacking"],
+      "answer": 1,
+      "note": "The value never becomes part of the parsed statement, so it cannot become syntax.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s1b-q10",
+      "topic": "Containers",
+      "prompt": "A Docker image layer is",
+      "options": [
+        "A running process",
+        "A read-only filesystem diff",
+        "A network namespace",
+        "A kernel module"
+      ],
+      "answer": 1,
+      "note": "Layers stack as immutable diffs; only the container's top layer is writable.",
+      "accent": "#ff9ffc"
+    }
+  ]
+}

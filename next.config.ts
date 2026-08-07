@@ -19,10 +19,10 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '/dor/quiz';
 
 const nextConfig: NextConfig = {
   basePath,
-  // `pg` and `google-auth-library` are CommonJS Node libraries that resolve
-  // optional native and dynamic requires at runtime. Bundling them into the
-  // server chunks breaks those; this leaves them as plain node_modules requires.
-  serverExternalPackages: ['pg', 'google-auth-library'],
+  // firebase-admin resolves gRPC transports and optional native modules through
+  // dynamic requires at runtime. Bundling it into the server chunks breaks those;
+  // this leaves it as a plain node_modules require.
+  serverExternalPackages: ['firebase-admin'],
   eslint: {
     // The port carries the site's own components verbatim. Lint them on their
     // own schedule rather than blocking a deploy on a rule they predate.

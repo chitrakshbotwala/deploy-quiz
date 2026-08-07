@@ -7,17 +7,14 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "db:up": "docker compose up -d",
-    "db:down": "docker compose down",
-    "db:psql": "docker compose exec db psql -U gdg -d gdg_quiz",
-    "db:dump": "docker compose exec -T db pg_dump -U gdg -d gdg_quiz"
+    "rules:deploy": "firebase deploy --only firestore:rules,firestore:indexes"
   },
   "dependencies": {
-    "google-auth-library": "^11.0.0",
+    "firebase": "^12.17.1",
+    "firebase-admin": "^14.2.0",
     "gsap": "^3.13.0",
     "hono": "^4.6.14",
     "next": "^15.1.0",
-    "pg": "^8.13.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.169.0"
@@ -25,7 +22,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.4",
     "@types/node": "^22.10.2",
-    "@types/pg": "^8.11.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.169.0",

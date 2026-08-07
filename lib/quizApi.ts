@@ -7,21 +7,36 @@
  */
 import { BASE_PATH } from './basePath';
 import type {
+  AdminStagesResponse,
   ApiError,
-  BootResponse,
+  CutSummaryResponse,
+  EventState,
   FinishResponse,
-  LeaderboardResponse,
-  PickResponse,
-  StartResponse
+  LockResponse,
+  SectionRunResponse,
+  ServeEnvelope,
+  StateResponse
 } from '@/server/types';
 
 export type {
-  AnsweredQuestion,
-  BootResponse,
+  AdminBoardResponse,
+  AdminRow,
+  AdminStagesResponse,
+  CutSummaryResponse,
+  EventState,
+  EventStatus,
   FinishResponse,
-  LeaderboardResponse,
-  PickResponse,
-  StartResponse
+  LockResponse,
+  PublicQuestion,
+  SectionResult,
+  SectionRunResponse,
+  SectionState,
+  SectionStatus,
+  ServeResponse,
+  SessionUser,
+  StageState,
+  StageStatus,
+  StateResponse
 } from '@/server/types';
 
 /** A failed call, carrying the server's error code so callers can branch on it. */
@@ -43,8 +58,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     // /dor/quiz and a bare `api/...` would resolve against whatever segment the
     // page happens to sit on.
     res = await fetch(`${BASE_PATH}/api${path}`, {
-      // The run cookie is httpOnly and same-origin; `same-origin` credentials is
-      // the default for fetch, but it is stated here because every route below
+      // The session cookie is httpOnly and same-origin; `same-origin` credentials
+      // is the default for fetch, but it is stated here because every route below
       // is meaningless without it.
       credentials: 'same-origin',
       headers: init?.body ? { 'content-type': 'application/json' } : undefined,
@@ -57,32 +72,57 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as ApiError | null;
-    throw new QuizApiError(body?.error ?? 'server-error', body?.message ?? 'Something went wrong.', res.status);
+    throw new QuizApiError(
+      body?.error ?? 'server-error',
+      body?.message ?? 'Something went wrong.',
+      res.status
+    );
   }
   return (await res.json()) as T;
 }
 
-/** The Google ID token from the sign-in button. The server does the verifying. */
-export interface StartRequest {
-  credential: string;
-}
+const post = <T>(path: string, body?: unknown) =>
+  call<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
 
 export const quizApi = {
+  /** Mount-time probe: who is signed in and where they stand on the ladder. */
+  state: () => call<StateResponse>('/state'),
+
   /**
-   * Mount-time probe: resumes from the run cookie if there is one, and carries
-   * the sign-up policy the gate draws itself against.
+   * Just the event's state. Cheap by design — this is what a waiting page polls,
+   * because /state builds the whole ladder and nobody waiting needs that yet.
    */
-  boot: () => call<BootResponse>('/run/current'),
+  event: () => call<EventState>('/event'),
 
-  start: (fields: StartRequest) =>
-    call<StartResponse>('/run/start', { method: 'POST', body: JSON.stringify(fields) }),
+  /** The Firebase ID token from the Google popup. The server does the verifying. */
+  login: (idToken: string) => post<StateResponse>('/auth/login', { idToken }),
 
-  pick: (qId: string, choice: number) =>
-    call<PickResponse>('/run/pick', { method: 'POST', body: JSON.stringify({ qId, choice }) }),
+  logout: () => post<{ ok: true }>('/auth/logout'),
 
-  finish: () => call<FinishResponse>('/run/finish', { method: 'POST' }),
+  openSection: (sectionId: string) => post<SectionRunResponse>(`/section/${sectionId}/open`),
 
-  leaderboard: (limit = 20) => call<LeaderboardResponse>(`/leaderboard?limit=${limit}`)
+  /** Asks for the next question. The server picks which one and stamps the deadline. */
+  serve: (sectionId: string) => post<ServeEnvelope>(`/section/${sectionId}/serve`),
+
+  /** `choice` is null when the clock ran out with nothing selected. */
+  lock: (sectionId: string, qId: string, choice: number | null) =>
+    post<LockResponse>(`/section/${sectionId}/lock`, { qId, choice }),
+
+  finish: (sectionId: string) => post<FinishResponse>(`/section/${sectionId}/finish`)
+};
+
+export const adminApi = {
+  session: () => call<{ admin: boolean }>('/admin/session'),
+  login: (password: string) => post<{ ok: true }>('/admin/login', { password }),
+  logout: () => post<{ ok: true }>('/admin/logout'),
+  board: () => call<AdminStagesResponse>('/admin/board'),
+  /** `restart` re-stamps the start time, for a false start. */
+  startQuiz: (restart = false) => post<EventState>('/admin/event/start', { restart }),
+  stopQuiz: () => post<EventState>('/admin/event/stop'),
+  cut: (stageId: string) => post<CutSummaryResponse>('/admin/cut', { stageId }),
+  clearCut: (stageId: string) => post<{ ok: true }>('/admin/cut/clear', { stageId }),
+  /** A link rather than a fetch: the browser saves the file itself. */
+  exportUrl: `${BASE_PATH}/api/admin/export`
 };
 
 /** mm:ss, shared by the readout and the board. */

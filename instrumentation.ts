@@ -1,37 +1,39 @@
 /**
  * Boot. Next calls `register()` once per server process, before the first
- * request — which is the hook the old standalone `server/index.ts` used to be.
+ * request.
  *
- * Three things have to happen here and nowhere else:
- *   - the environment is validated, so a deploy missing RUN_COOKIE_SECRET dies
- *     at start rather than at whichever request first tries to sign a cookie;
- *   - the answer key is checked against the question list, so a question added
- *     without an answer fails while someone is watching instead of mid-event;
- *   - migrations run, so a fresh box converges on the schema by starting.
+ * Two things have to happen here and nowhere else:
+ *   - the environment is validated, so a deploy missing the service account or
+ *     the admin password dies at start rather than at whichever request first
+ *     tries to read Firestore;
+ *   - the question files are parsed and checked, so a half-edited JSON file fails
+ *     while someone is watching instead of mid-event, at the moment a participant
+ *     reaches that question.
+ *
+ * There are no migrations to run any more: Firestore has no schema to converge
+ * on, and the document ids that enforce one-attempt-per-person are properties of
+ * the write path in server/store.ts.
  */
 export async function register() {
-  // The edge runtime has no `pg` and no filesystem; only the Node server boots
-  // the database. And `next build` evaluates this file too — migrating from a
-  // build machine that has no database would fail the build for no reason.
+  // The edge runtime has no filesystem and no firebase-admin; only the Node
+  // server boots this. And `next build` evaluates this file too — a build machine
+  // holds no credentials and must not need them.
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
   if (process.env.NEXT_PHASE === 'phase-production-build') return;
 
-  const [{ assertEnv }, { migrate }, { sweep }, { assertKeyCoversQuestions }, { quizQuestions }] =
-    await Promise.all([
-      import('@/server/env'),
-      import('@/server/db'),
-      import('@/server/ratelimit'),
-      import('@/server/answers'),
-      import('@/content/quizQuestions')
-    ]);
+  const [{ assertEnv }, { assertQuizWellFormed, STAGES }, { sweep }] = await Promise.all([
+    import('@/server/env'),
+    import('@/server/quiz'),
+    import('@/server/ratelimit')
+  ]);
 
   assertEnv();
-  assertKeyCoversQuestions(quizQuestions.map(q => q.id));
-  await migrate();
+  assertQuizWellFormed();
 
   // Drops expired rate-limit windows. `unref` so the timer never holds the
   // process open on shutdown.
   setInterval(sweep, 5 * 60_000).unref();
 
-  console.log('[api] ready');
+  const ladder = STAGES.map(s => `${s.id}[${s.sectionIds.join('+')}]→${s.cutoff}`).join(' ');
+  console.log(`[api] ready — ${ladder}`);
 }

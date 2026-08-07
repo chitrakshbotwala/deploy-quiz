@@ -42,10 +42,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_QUIZ_URL ?? 'https://gdgkiit.in/dor/quiz'),
   title: 'GDG KIIT — Deploy or [REDACTED]: The Quiz',
   description:
-    'Ten questions on code, protocols, and one guidance computer. Fly the asteroid field, answer as you go, and get your readout.',
+    'Two rounds on code, protocols, and one guidance computer. Ten seconds a question. Fly the asteroid field and answer as you go.',
   openGraph: {
     title: 'GDG KIIT — Deploy or [REDACTED]: The Quiz',
-    description: 'Ten questions on code, protocols, and one guidance computer. One rock per question.',
+    description: 'Two rounds, ten seconds a question. One rock per question.',
     type: 'website',
     images: ['/og-image.svg']
   },

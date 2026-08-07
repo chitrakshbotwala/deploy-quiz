@@ -620,48 +620,25 @@ body::-webkit-scrollbar {
   --on: 0.7;
 }
 
-/* The pick. Catch is the footer's 220ms strike: a pre-glow, one dropout, then it
-   holds. `backwards` fill, never `forwards` — the same reason it is backwards on
-   the wordmark, so the row hands off to the declared `--on: 1` instead of
-   pinning an animated value. */
-.quiz-answer[data-state='correct'] {
-  --lit: var(--color-signal-ok);
+/* The selection. Catch is the footer's 220ms strike: a pre-glow, one dropout,
+   then it holds. `backwards` fill, never `forwards` — the same reason it is
+   backwards on the wordmark, so the row hands off to the declared `--on: 1`
+   instead of pinning an animated value.
+
+   This is the ONLY state a row can be in besides armed. There is no correct row
+   and no wrong row, because the server never tells the browser which is which:
+   sections are a selection round and the answer key stays server-side for the
+   whole event. A held selection stays in the question's own accent — the same hue
+   as the asteroid ahead — and can be changed or dropped until the clock runs out
+   or Continue is pressed. */
+.quiz-answer[data-state='picked'] {
   --on: 1;
   animation: wordmark-catch 220ms steps(1, end) backwards;
 }
 
-/* A wrong pick catches too, then starves. It has to end dark-ish rather than
-   dead: the row still has to be readable as "this is the one you chose" after
-   the light goes. `forwards` is correct here and only here, because the row is
-   terminal — it is disabled for the rest of the question, so nothing later
-   depends on transitioning off the animated value. */
-@keyframes quiz-starve {
-  0%   { --on: 0.3;  animation-timing-function: steps(1, end); }
-  18%  { --on: 0.06; animation-timing-function: steps(1, end); }
-  30%  { --on: 1;    animation-timing-function: steps(1, end); }
-  46%  { --on: 1;    animation-timing-function: steps(1, end); }
-  54%  { --on: 0.08; animation-timing-function: steps(1, end); }
-  62%  { --on: 0.74; animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
-  78%  { --on: 0.12; animation-timing-function: steps(1, end); }
-  84%  { --on: 0.5;  animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
-  100% { --on: 0.34; }
-}
-.quiz-answer[data-state='wrong'] {
-  --lit: var(--color-signal-off);
-  animation: quiz-starve 900ms forwards;
-}
-
-/* The right answer, revealed after a wrong pick. It does NOT strike: nobody
-   struck it. It simply comes up, and it waits out the wrong row's failure first
-   (900ms) so the two are read in order rather than as one flat state change. */
-.quiz-answer[data-state='reveal'] {
-  --lit: var(--color-signal-ok);
-  --on: 0.85;
-  transition: --on 520ms cubic-bezier(0.22, 1, 0.36, 1) 760ms;
-}
-
-/* Everything not involved in the outcome recedes so the two lit rows carry it. */
-.quiz-answer[data-state='muted'] .quiz-label {
+/* Once a lock is in the air every row is disabled; the unheld ones recede so the
+   held one is unmistakable at the moment it becomes irreversible. */
+.quiz-answer[disabled]:not([data-state='picked']) .quiz-label {
   color: rgba(255, 255, 255, 0.38);
 }
 

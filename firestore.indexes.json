@@ -1,0 +1,5 @@
+{
+  "//": "Empty on purpose. Every query the quiz makes is either a document get, a whole-collection read, or a single-field orderBy on `sortKey` inside one stage's standings subcollection — all of which Firestore's automatic single-field indexes already serve. The one ordering that would have needed a composite index (score descending, then time ascending) is folded into that single sortKey string instead; see the note at the top of server/store.ts.",
+  "indexes": [],
+  "fieldOverrides": []
+}

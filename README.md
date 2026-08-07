@@ -1,77 +1,192 @@
 # Deploy or [REDACTED] — the quiz
 
-Ten questions, one run per person, scored on a server. Next.js (App Router) +
-Hono + Postgres, served at **gdgkiit.in/dor/quiz** from a VPS.
+A two-round selection quiz. Ten seconds a question, scored on a server, one
+attempt per person per section, and no leaderboard anyone but the organisers can
+see. Next.js (App Router) + Hono + Firebase (Auth, Firestore, Analytics), served
+at **gdgkiit.in/dor/quiz** from a VPS.
 
 The landing page is a separate deployment and stays on Vercel
 ([SigniorAtif/deploy](https://github.com/SigniorAtif/deploy)); its `/quiz` link
 redirects here. This repo owns the quiz and nothing else.
 
-## Why it is its own thing
+## The flow
 
-The quiz used to be a second entry point in the landing page's Vite build. That
-worked for as long as the quiz was static. It stopped working the moment the
-answers had to leave the bundle: a scored leaderboard needs a database, a
-session cookie, and a process that stays up — none of which a static host
-provides, and none of which the landing page wants to grow a VPS for. So the two
-split along the line that already existed between them.
+```
+sign in (Google, via Firebase)
+      │
+      ├─ Stage 1 ── Section 1 ──► Section 2          everyone
+      │                 │
+      │        organiser freezes the cut: top 150 by score,
+      │        ties broken by the faster total answering time
+      │                 │
+      │        ┌────────┴────────┐
+      │      in top 150      below it
+      │        │                 └─► "Sorry — your rank was 151, and you are
+      │        │                      not eligible for Stage 2."
+      ├─ Stage 2 ── Section 1                        the 150
+      │                 │
+      │        organiser freezes the cut: top 75
+      │                 │
+      └────────────► the finalists
+```
+
+Both cutoffs are environment variables (`STAGE1_CUTOFF`, `STAGE2_CUTOFF`) and
+both cuts are taken by hand from `/dor/quiz/admin`. That is deliberate — see
+"Why the cut is a moment" below.
+
+## Starting and stopping it
+
+The quiz is idle until an organiser presses **Start quiz** on `/dor/quiz/admin`,
+and sign-in does not wait on that: people register beforehand, land on their
+ladder, and see *"Waiting for the organisers to start the quiz."* That page polls,
+so it opens by itself when the button is pressed — nobody has to be told to
+refresh a hall full of laptops.
+
+**Stop quiz** shuts the door on new sections and new questions. It deliberately
+does **not** cancel a question already on someone's screen: their lock still
+counts and their section still closes out, because throwing away an answer
+somebody already gave is worse than ending a section early. Resuming keeps the
+original start time, so the elapsed clock on the board measures the event.
+
+## Rules the server enforces
+
+Every one of these is enforced server-side, and the browser only draws it:
+
+- **Ten seconds a question.** A question is handed out with a server-stamped
+  deadline. Refreshing returns the *same* deadline, so a reload cannot buy more
+  time, and a lock that arrives late is recorded as no answer at all.
+- **Select, then lock.** Clicking an option only selects it. It is committed when
+  Continue is pressed or when the clock runs out — so a misclick is recoverable
+  right up to the deadline.
+- **One attempt per section per account.** The attempt's document id *is* the
+  participant's Firebase uid, so a second attempt is the same document, and the
+  write that would open it is a transaction that refuses to overwrite a finished
+  one. Signing out and back in with the same account resumes; the account is the
+  identity, not the browser.
+- **Ranking is score, then time.** Time is the sum of per-question answering time,
+  not wall clock: a locked phone or a slow network cannot inflate it. A question
+  never served is charged its full budget, so walking away is never the fastest
+  run.
+- **No answers, ever, to anyone.** Not per question, not in the readout. A
+  participant sees their total and their time. Nobody sees anybody else's row.
+
+## Why the cut is a moment
+
+A live "am I in the top 150?" flickers — true at 19:04, false at 19:06, because
+somebody else finished. Someone could start round two and be barred halfway
+through it. So eligibility is frozen: an organiser presses a button, everyone who
+finished the stage is ranked, and the result is written down with a timestamp.
+That is also the only way to tell the 151st participant a rank that will not move
+under them.
+
+`Undo cut` exists for the cut taken too early. Re-freezing re-ranks from scratch.
 
 ## Shape
 
 ```
 app/
-  layout.tsx                 fonts (self-hosted via next/font), metadata
-  page.tsx                   the only route — renders the client shell
+  page.tsx                   the participant app (one route, no navigation)
+  admin/page.tsx             the organisers' board, behind one password
   api/[[...route]]/route.ts  one catch-all, the Hono app mounted behind it
-components/quiz/             the run: gate, question panel, readout, board
+data/questions/*.json        ── EDIT ME ── questions, answers, per-question budget
+components/quiz/             gate → ladder → section → readout / eliminated
   AsteroidField.tsx          the WebGL flight (desktop, motion allowed)
-server/                      answer key, database, sessions, routes
-  answers.ts                 the whole reason there is a server
-  types.ts                   the API contract — imported by the client as types
-migrations/                  applied at boot, in filename order
+components/admin/            the leaderboard, the cut buttons, the CSV export
+hooks/useSection.ts          the run state machine. Knows no answers.
+server/
+  quiz.ts                    reads the JSON, strips the answers, holds the ladder
+  store.ts                   every Firestore read and write, and the ranking
+  firebase.ts                Admin SDK: token verification and the DB handle
+  routes.ts                  the API
+  types.ts                   the contract — imported by the client as types
+firestore.rules              deny all. The browser never touches Firestore.
 ```
 
-Two renderers, one engine. `hooks/useQuiz.ts` holds the run state machine and
-knows no answers; `components/quiz/QuizRun.tsx` draws it as a WebGL asteroid
-field on desktop and as warp panels everywhere else.
+Two renderers, one engine: `hooks/useSection.ts` holds the run and knows no
+answers; `components/quiz/SectionRun.tsx` draws it as a WebGL asteroid field on
+desktop and as warp panels everywhere else.
 
-### The base path
+### Where the answers live
 
-The app is mounted at `/dor/quiz`, not at a domain root, and three things have
-to agree about that: Next's `basePath` (asset URLs), the client's fetch prefix,
-and the run cookie's `path`. All three read `lib/basePath.ts`, which reads
-`NEXT_PUBLIC_BASE_PATH`. It is a **build-time** value — changing it means
-rebuilding, not restarting.
+`data/questions/*.json` carries the correct option and a note for each question.
+That directory is read by `server/quiz.ts` and is **never** imported by a client
+component: the browser is served a copy with `answer` and `note` stripped, by the
+same function that reads the file. Add a question by editing one JSON file — there
+is no second list to keep in sync, and the server refuses to boot if a file is
+malformed or an answer index is out of range.
+
+The verdict is recorded in Firestore and never returned. `firestore.rules` denies
+every client read and write, so a signed-in browser cannot read its own attempt
+document, let alone the field that says whether it was right.
+
+### Adding or changing a section
+
+`data/questions/` holds one file per section; `STAGES` in `server/quiz.ts` says
+which sections belong to which stage and in what order. A new section is a new
+file plus one id in that array. `secondsPerQuestion` is per section.
 
 ## Local development
 
 ```bash
-cp .env.example .env.local     # fill in GOOGLE_CLIENT_ID and RUN_COOKIE_SECRET
+cp .env.example .env.local     # then fill it in — see below
 npm ci
-npm run db:up                  # Postgres on 127.0.0.1:5432
 npm run dev                    # http://localhost:3000/dor/quiz
 ```
 
-Migrations run themselves at boot. Sign-in needs a real OAuth client id with
-`http://localhost:3000` in its authorised JavaScript origins — there is
-deliberately no email fallback, so without one the gate has no way in.
+`.env.local` needs a real Firebase project: the web config (public, inlined into
+the bundle at build time) and a service-account key (secret, server-only). There
+is deliberately no email fallback and no emulator shortcut wired in, so without a
+project the gate has no way in. `deploy/README.md` has the console walkthrough.
 
-`dev` runs on Turbopack, and that is load-bearing rather than a preference.
-Next compiles `instrumentation.ts` for the edge runtime as well as for Node, and
-`serverExternalPackages` does not apply to that pass — so webpack follows
-`server/db.ts` into `pg`, fails to resolve `fs`, and the build error it raises
-makes every request in the session return 500. The `NEXT_RUNTIME` guard inside
-`register()` stops the code from *running* on the edge; it cannot stop the
-bundler from *resolving* it. `next build` is unaffected and stays on webpack.
+Sign-in is open to **any Google account** by default (`QUIZ_EMAIL_DOMAINS` empty).
+Set a domain list there to get the hard one-attempt-per-person guarantee back —
+see the note in `.env.example` for what leaving it open costs.
 
-## Editing questions
+`localhost` must be in **Authentication → Settings → Authorised domains**, or the
+popup fails with `auth/unauthorized-domain`.
 
-Question text, options and accent live in `content/quizQuestions.ts`, which is
-bundled and public. The correct option and its explanation live in
-`server/answers.ts`, which is not. Adding a question means editing **both**,
-keyed by the same `id` and in the same order — `assertKeyCoversQuestions()`
-refuses to start the server if they drift apart.
+`dev` runs on Turbopack, and that is load-bearing rather than a preference. Next
+compiles `instrumentation.ts` for the edge runtime as well as for Node, and the
+Node-only imports in it (`node:fs`, `firebase-admin`) fail that compile under
+webpack; Turbopack skips it.
 
-## Deploying
+### The base path
 
-See [deploy/README.md](deploy/README.md).
+The app is mounted at `/dor/quiz`, not at a domain root, and three things have to
+agree about that: Next's `basePath` (asset URLs), the client's fetch prefix, and
+the cookies' `path`. All three read `lib/basePath.ts`, which reads
+`NEXT_PUBLIC_BASE_PATH`. It is a **build-time** value — changing it means
+rebuilding, not restarting.
+
+## The admin board
+
+`/dor/quiz/admin`, one password (`ADMIN_PASSWORD`), compared in constant time
+behind a six-attempts-per-hour per-IP limit. The session is a signed cookie that
+ages out in four hours.
+
+It is the only leaderboard in the app. No participant-facing route returns another
+participant's row, a rank other than their own, or any score but their own total.
+The board is also where the quiz is started and stopped — with a clock showing how
+long it has been running — where the cuts are taken, and where the CSV comes from.
+
+## Data, and deleting it
+
+Firestore, all of it written by the API:
+
+```
+event/state                                         started, stopped, when
+participants/{uid}                                  who signed in
+sections/{sectionId}/attempts/{uid}                 one attempt, ever
+sections/{sectionId}/attempts/{uid}/answers/{qId}   one lock, ever
+stages/{stageId}/standings/{uid}                    the stage total
+stages/{stageId}/cutMembers/{uid}                   the frozen cut, ranked
+```
+
+Ranking folds score-descending and time-ascending into one ascending `sortKey`
+string, written only once a participant has finished every section in the stage.
+Firestore skips documents that lack the field being ordered, so "rank the people
+who finished" needs no filter and therefore no composite index — which is why
+`firestore.indexes.json` is empty.
+
+The gate promises participants their address stays with the organisers and is used
+only for this event. `deploy/README.md` has the commands that keep that promise.

@@ -1,0 +1,119 @@
+{
+  "sectionId": "s2a",
+  "stageId": "stage2",
+  "label": "Stage 2 · The final",
+  "blurb": "Top 150 only. Ten seconds a question, and the clock is the tie-break.",
+  "secondsPerQuestion": 10,
+  "questions": [
+    {
+      "id": "s2a-q1",
+      "topic": "Consensus",
+      "prompt": "Raft elects a leader to guarantee",
+      "options": [
+        "Lower latency",
+        "A single ordering of the log",
+        "Automatic sharding",
+        "Zero downtime"
+      ],
+      "answer": 1,
+      "note": "One leader means one append order, which is what replicas replay.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s2a-q2",
+      "topic": "Isolation",
+      "prompt": "Which anomaly does REPEATABLE READ still allow in the SQL standard?",
+      "options": ["Dirty read", "Non-repeatable read", "Phantom read", "None"],
+      "answer": 2,
+      "note": "Only SERIALIZABLE rules out phantoms; a new matching row can still appear.",
+      "accent": "#b497cf"
+    },
+    {
+      "id": "s2a-q3",
+      "topic": "Compilers",
+      "prompt": "Tail-call optimisation removes",
+      "options": ["Dead code", "A stack frame", "A heap allocation", "A branch"],
+      "answer": 1,
+      "note": "The call in tail position reuses the caller's frame instead of pushing a new one.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s2a-q4",
+      "topic": "Browsers",
+      "prompt": "Which does NOT trigger layout?",
+      "options": ["offsetHeight read", "transform: translate", "className change", "appendChild"],
+      "answer": 1,
+      "note": "Transforms are composited; they skip layout and paint entirely.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s2a-q5",
+      "topic": "Cryptography",
+      "prompt": "An HMAC needs",
+      "options": ["A key pair", "A shared secret", "A certificate", "A nonce only"],
+      "answer": 1,
+      "note": "Symmetric: the same secret both signs and verifies.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s2a-q6",
+      "topic": "Memory",
+      "prompt": "A page fault means",
+      "options": [
+        "The process crashed",
+        "The mapping is not resident",
+        "The disk failed",
+        "The cache line was evicted"
+      ],
+      "answer": 1,
+      "note": "The MMU traps to the kernel, which fetches or maps the page and resumes.",
+      "accent": "#b497cf"
+    },
+    {
+      "id": "s2a-q7",
+      "topic": "Rate limiting",
+      "prompt": "A token bucket differs from a fixed window by allowing",
+      "options": ["Bursts", "Higher averages", "Per-user keys", "Nothing"],
+      "answer": 0,
+      "note": "Saved tokens absorb a burst while the long-run average stays capped.",
+      "accent": "#d9bf6b"
+    },
+    {
+      "id": "s2a-q8",
+      "topic": "Git internals",
+      "prompt": "A git commit object stores",
+      "options": ["A diff", "A tree hash", "A file list with contents", "A branch name"],
+      "answer": 1,
+      "note": "Commits point at a tree snapshot; diffs are computed on demand.",
+      "accent": "#8fa9e8"
+    },
+    {
+      "id": "s2a-q9",
+      "topic": "HTTP/2",
+      "prompt": "Multiplexing removes",
+      "options": [
+        "TLS overhead",
+        "Head-of-line blocking at the HTTP layer",
+        "DNS lookups",
+        "The need for caching"
+      ],
+      "answer": 1,
+      "note": "Streams interleave on one connection. TCP-level blocking remained until QUIC.",
+      "accent": "#ff9ffc"
+    },
+    {
+      "id": "s2a-q10",
+      "topic": "Apollo",
+      "prompt": "The 1202 alarm during Apollo 11's descent meant",
+      "options": [
+        "Fuel low",
+        "Executive overflow — no free core sets",
+        "Radar lost",
+        "Guidance failure"
+      ],
+      "answer": 1,
+      "note": "The scheduler had more jobs than core sets and shed the low-priority ones. Landing continued.",
+      "accent": "#b497cf"
+    }
+  ]
+}

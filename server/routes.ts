@@ -1,26 +1,37 @@
+import { timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { db, tx } from './db';
 import { env } from './env';
-import { answerKey, isKnownQuestion, questionOrder, TOTAL } from './answers';
-import { clearRunCookie, issueRunCookie, readRunId } from './session';
+import { verifyIdToken } from './firebase';
+import { publicQuestions, sectionById, STAGES, stageById } from './quiz';
 import { clientIp, take } from './ratelimit';
-import { verifyGoogleCredential } from './google';
 import {
-  bestStreakOf,
-  buildFinishResponse,
-  currentStreakOf,
-  loadPicks,
-  rankOf,
-  scoreOf,
-  toAnswered
-} from './run';
+  adminBoards,
+  clearCut,
+  eventState,
+  finishSection,
+  knownSection,
+  ladderFor,
+  lockAnswer,
+  openAttempt,
+  participantOf,
+  sectionStateIn,
+  serveNext,
+  startEvent,
+  stopEvent,
+  takeCut,
+  touchParticipant
+} from './store';
+import { clearAdmin, clearSession, isAdmin, issueAdmin, issueSession, readUid } from './session';
 import type {
+  AdminStagesResponse,
   ApiError,
-  BootResponse,
-  LeaderboardResponse,
-  PickResponse,
-  StartResponse
+  EventState,
+  FinishResponse,
+  LockResponse,
+  SectionRunResponse,
+  ServeEnvelope,
+  StateResponse
 } from './types';
 
 function fail(c: Context, status: number, error: ApiError['error'], message: string) {
@@ -31,67 +42,79 @@ export const api = new Hono();
 
 api.get('/health', c => c.json({ ok: true }));
 
-/**
- * Resume from the cookie alone.
- *
- * The client calls this on mount so a refresh mid-run lands back on the right
- * question without retyping anything. It is the ONLY resume path — see the note
- * on /run/start about why re-entering an email deliberately does not resume.
- */
-api.get('/run/current', async c => {
-  const policy = { emailDomains: env.emailDomains, googleClientId: env.googleClientId };
-  const runId = readRunId(c);
-  if (!runId) return c.json<BootResponse>({ run: null, ...policy });
-  const { rows } = await db().query<{ started_at: Date; finished_at: Date | null }>(
-    'select started_at, finished_at from runs where id = $1',
-    [runId]
-  );
-  if (!rows.length) {
-    // Signed cookie for a run that no longer exists (database reset between
-    // events). Drop it rather than leaving the client in a loop.
-    clearRunCookie(c);
-    return c.json<BootResponse>({ run: null, ...policy });
-  }
-  const picks = await loadPicks(runId);
-  const body: StartResponse = {
-    startedAt: rows[0].started_at.toISOString(),
-    answered: toAnswered(picks),
-    finished: rows[0].finished_at ? await buildFinishResponse(runId) : null
+// ── Identity ─────────────────────────────────────────────────────────────────
+
+async function stateFor(uid: string | null): Promise<StateResponse> {
+  const sections = STAGES.flatMap(s => s.sectionIds);
+  const event = await eventState();
+  const base = {
+    emailDomains: env.emailDomains,
+    event,
+    now: new Date().toISOString(),
+    preview: {
+      stages: STAGES.length,
+      sections: sections.length,
+      // The first section's budget stands for all of them on the sign-in screen.
+      // They are per-section values in the JSON, and if a later section ever
+      // differs the gate's "10s" line is the wrong place to explain that — the
+      // ladder states each section's own budget.
+      secondsPerQuestion: sectionById(sections[0])?.secondsPerQuestion ?? 10
+    }
   };
-  return c.json<BootResponse>({ run: body, ...policy });
-});
+  if (!uid) return { user: null, stages: [], ...base };
+  const [identity, stages] = await Promise.all([participantOf(uid), ladderFor(uid)]);
+  if (!identity) return { user: null, stages: [], ...base };
+  return { user: { name: identity.name, email: identity.email }, stages, ...base };
+}
 
 /**
- * Sign in with Google and open a run.
+ * Mount-time probe: who is signed in, and the whole ladder as it stands for them.
  *
- * Identity is not asserted by the caller any more. The body carries an ID token
- * that Google signed, and `verifyGoogleCredential` checks the signature, the
- * audience and the `hd` claim before a row is touched. The practical difference
- * is that a visitor can no longer sign in as anyone but themselves — which
- * matters more here than it usually would, because attempts are one per person
- * and enforced hard, so being able to sign up as a classmate meant being able to
- * destroy the only run they would ever get.
- *
- * Resume is still NOT offered on identity alone. If an account already has a run
- * and the caller is not holding that run's signed cookie, this returns 409:
- * signing in again on a second device must not reopen a run that is halfway
- * through somewhere else. Clearing cookies ends your attempt, which is the
- * correct trade for a scored board.
+ * This is the only route the shell needs to draw any screen — gate, dashboard,
+ * resumed section, or the eliminated page — because every one of those is a
+ * function of the same state.
  */
-api.post('/run/start', async c => {
+api.get('/state', async c => c.json(await stateFor(readUid(c))));
+
+/**
+ * Just the event's state, and the route a waiting page polls.
+ *
+ * Separate from /state on purpose. /state costs nine Firestore reads because it
+ * builds the whole ladder, and a hall of participants waiting for the organisers
+ * to start would poll that into a bill for something none of them needs yet. This
+ * one is a cached single document (see `eventState`), so the wait is nearly free,
+ * and the client fetches the full state once — when this flips.
+ */
+api.get('/event', async c => c.json(await eventState()));
+
+/**
+ * Sign in with Firebase and open a session.
+ *
+ * The body carries an ID token minted by Firebase Auth after a Google popup.
+ * `verifyIdToken` checks the signature, the audience, the provider and the email
+ * domain before a document is touched, so a participant cannot sign in as anyone
+ * but themselves — which matters more here than it usually would, because
+ * attempts are one per person per section and enforced by document id, so being
+ * able to sign in as a classmate would mean being able to burn the only attempt
+ * that classmate will ever get.
+ */
+api.post('/auth/login', async c => {
   const ip = clientIp(c);
-  if (!take(`start:${ip}`, 12, 10 * 60_000)) {
+  if (!take(`login:${ip}`, 20, 10 * 60_000)) {
     return fail(c, 429, 'rate-limited', 'Too many sign-ins from this address. Wait a few minutes.');
   }
 
-  const body = (await c.req.json().catch(() => null)) as { credential?: unknown } | null;
-  const credential = typeof body?.credential === 'string' ? body.credential : '';
-  if (!credential) return fail(c, 400, 'invalid-body', 'Sign in with Google to start.');
+  const body = (await c.req.json().catch(() => null)) as { idToken?: unknown } | null;
+  const idToken = typeof body?.idToken === 'string' ? body.idToken : '';
+  if (!idToken) return fail(c, 400, 'invalid-body', 'Sign in with Google to start.');
 
-  const verified = await verifyGoogleCredential(credential);
+  const verified = await verifyIdToken(idToken);
   if (!verified.ok) {
     if (verified.reason === 'unverified-email') {
       return fail(c, 403, 'unverified-email', 'Google has not verified that address.');
+    }
+    if (verified.reason === 'wrong-provider') {
+      return fail(c, 403, 'wrong-provider', 'Sign in with Google, not with any other method.');
     }
     if (verified.reason === 'wrong-domain') {
       const want = env.emailDomains[0];
@@ -99,233 +122,322 @@ api.post('/run/start', async c => {
         c,
         403,
         'email-domain',
-        verified.hd
-          ? `That is a @${verified.hd} account. Sign in with your @${want} one.`
+        verified.domain
+          ? `That is a @${verified.domain} account. Sign in with your @${want} one.`
           : `Sign in with your @${want} account, not a personal Google account.`
       );
     }
     return fail(c, 401, 'invalid-token', 'That sign-in could not be verified. Try again.');
   }
-  const { sub, email, name } = verified.identity;
 
-  const cookieRunId = readRunId(c);
-  const userAgent = c.req.header('user-agent')?.slice(0, 300) ?? null;
+  await touchParticipant(verified.identity);
+  issueSession(c, verified.identity.uid);
+  return c.json(await stateFor(verified.identity.uid));
+});
 
-  const result = await tx(async client => {
-    // Keyed on `google_sub`, not on the address: Workspace accounts can be
-    // renamed, and the sub is the thing Google promises is stable.
-    //
-    // `do update set name = participants.name` is a deliberate no-op. It writes
-    // nothing, but it still takes the row lock and returns the id, which lets the
-    // run check below happen BEFORE any detail is touched. An earlier version
-    // wrote `excluded.name` here, and while sign-in makes that far harder to
-    // abuse than the old form did, a rejected sign-in still has no business
-    // editing a row it was just refused.
-    const { rows: pRows } = await client.query<{ id: string }>(
-      `insert into participants (name, email, google_sub)
-            values ($1, $2, $3)
-       on conflict (google_sub)
-       do update set name = participants.name
-         returning id`,
-      [name, email, sub]
-    );
-    const participantId = pRows[0].id;
+api.post('/auth/logout', c => {
+  clearSession(c);
+  return c.json({ ok: true });
+});
 
-    // `for update` so two tabs submitting at once cannot both pass the "no run
-    // yet" check and race the unique constraint into a 500.
-    const { rows: existing } = await client.query<{
-      id: string;
-      started_at: Date;
-      finished_at: Date | null;
-    }>('select id, started_at, finished_at from runs where participant_id = $1 for update', [participantId]);
+// ── A section ────────────────────────────────────────────────────────────────
 
-    if (existing.length) {
-      const run = existing[0];
-      if (run.id !== cookieRunId) return { kind: 'taken' as const, finished: run.finished_at !== null };
-      return { kind: 'resume' as const, runId: run.id, startedAt: run.started_at, finished: run.finished_at };
-    }
+/**
+ * The event gate, checked on the two routes that hand out anything: opening a
+ * section and being served a question.
+ *
+ * Locking an answer and finishing a section are deliberately NOT gated. When the
+ * organisers press stop, someone is mid-question with eight seconds left, and
+ * refusing their lock would throw away an answer they already gave. Stop therefore
+ * means "no new questions" rather than "drop what is in flight", and a section
+ * that had a question open can still be closed out and counted.
+ */
+function eventRefusal(event: EventState): { error: ApiError['error']; message: string } | null {
+  if (event.status === 'running') return null;
+  if (event.status === 'stopped') {
+    return { error: 'quiz-stopped', message: 'The organisers have ended the quiz.' };
+  }
+  return {
+    error: 'quiz-not-started',
+    message: 'The quiz has not started yet. Wait for the organisers — this page will open on its own.'
+  };
+}
 
-    // Past the run check, so this sign-in is the one that counts. Only now is
-    // the profile refreshed — a display name that changed in Workspace since a
-    // previous visit should follow, but a run already under way must not be
-    // relabelled underneath its leaderboard row.
-    await client.query('update participants set name = $2, email = $3 where id = $1', [
-      participantId,
-      name,
-      email
-    ]);
+/**
+ * Open a section, or resume the attempt already open.
+ *
+ * The gate is the ladder, not the request: `ladderFor` decides whether this
+ * section is reachable for this participant, and the four ways it can refuse —
+ * an earlier section unfinished, the stage not yet open, the cut went the other
+ * way, the attempt already closed — are distinct answers because the client draws
+ * a different screen for each.
+ *
+ * Questions come back stripped of their answers. See server/quiz.ts.
+ */
+api.post('/section/:id/open', async c => {
+  const uid = readUid(c);
+  if (!uid) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
+  const section = knownSection(c.req.param('id'));
+  if (!section) return fail(c, 404, 'unknown-section', 'No such section.');
 
-    const { rows: created } = await client.query<{ id: string; started_at: Date }>(
-      `insert into runs (participant_id, ip, user_agent) values ($1, $2, $3) returning id, started_at`,
-      [participantId, ip === 'unknown' ? null : ip, userAgent]
-    );
-    return { kind: 'new' as const, runId: created[0].id, startedAt: created[0].started_at };
-  });
+  const [identity, event] = await Promise.all([participantOf(uid), eventState()]);
+  if (!identity) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
+  const refused = eventRefusal(event);
+  if (refused) return fail(c, 409, refused.error, refused.message);
 
-  if (result.kind === 'taken') {
-    return fail(
-      c,
-      409,
-      'already-ran',
-      result.finished
-        ? 'You have already completed the quiz. One attempt per person.'
-        : 'You already have a run in progress on another device. Finish it there.'
-    );
+  const ladder = await ladderFor(uid);
+  const state = sectionStateIn(ladder, section.id);
+  if (!state) return fail(c, 404, 'unknown-section', 'No such section.');
+  if (state.status === 'barred') {
+    return fail(c, 403, 'not-eligible', 'This round is not open to you.');
+  }
+  if (state.status === 'locked') {
+    return fail(c, 409, 'section-locked', 'Finish the section before this one first.');
+  }
+  if (state.status === 'done') {
+    return fail(c, 409, 'section-done', 'You have already completed this section.');
   }
 
-  issueRunCookie(c, result.runId);
-  const picks = result.kind === 'resume' ? await loadPicks(result.runId) : [];
-  const payload: StartResponse = {
-    startedAt: result.startedAt.toISOString(),
-    answered: toAnswered(picks),
-    finished:
-      result.kind === 'resume' && result.finished ? await buildFinishResponse(result.runId) : null
+  const opened = await openAttempt(
+    section,
+    identity,
+    clientIp(c) === 'unknown' ? null : clientIp(c),
+    c.req.header('user-agent')?.slice(0, 300) ?? null
+  );
+  if (!opened.ok) return fail(c, 409, 'section-done', 'You have already completed this section.');
+
+  // A resumed attempt comes back mid-question with its original deadline, so a
+  // refresh cannot buy more time. `serveNext` is the one place that decides.
+  const served = await serveNext(section, uid);
+  const payload: SectionRunResponse = {
+    section: { ...state, status: 'in-progress', answered: opened.attempt.answered },
+    questions: publicQuestions(section.id),
+    serve:
+      served.kind === 'serve'
+        ? {
+            qId: served.serve.qId,
+            servedAt: served.serve.servedAt.toDate().toISOString(),
+            deadlineAt: served.serve.deadlineAt.toDate().toISOString(),
+            now: new Date().toISOString()
+          }
+        : null
+  };
+  return c.json(payload);
+});
+
+/** The next question and its deadline, both chosen by the server. */
+api.post('/section/:id/serve', async c => {
+  const uid = readUid(c);
+  if (!uid) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
+  const section = knownSection(c.req.param('id'));
+  if (!section) return fail(c, 404, 'unknown-section', 'No such section.');
+
+  const refused = eventRefusal(await eventState());
+  if (refused) return fail(c, 409, refused.error, refused.message);
+
+  const served = await serveNext(section, uid);
+  if (served.kind === 'no-attempt') return fail(c, 409, 'section-locked', 'That section is not open.');
+  if (served.kind === 'finished') return fail(c, 409, 'section-done', 'That section is already closed.');
+  const payload: ServeEnvelope = {
+    serve:
+      served.kind === 'serve'
+        ? {
+            qId: served.serve.qId,
+            servedAt: served.serve.servedAt.toDate().toISOString(),
+            deadlineAt: served.serve.deadlineAt.toDate().toISOString(),
+            now: new Date().toISOString()
+          }
+        : null
   };
   return c.json(payload);
 });
 
 /**
- * Record one answer and hand back the verdict.
+ * Lock one answer.
  *
- * The answer key is consulted here and nowhere else. `picks`' primary key does
- * the enforcement: a second POST for the same question inserts nothing and is
- * rejected, so a visitor cannot pick, read the returned answer, and re-pick.
+ * `choice` may be null, which is what the client sends when the clock ran out
+ * with nothing selected. Nothing about correctness comes back — the response
+ * carries progress and the next question id, and that is all a participant is
+ * entitled to know until the organisers publish results.
  */
-api.post('/run/pick', async c => {
-  const runId = readRunId(c);
-  if (!runId) return fail(c, 401, 'no-run', 'No run in progress. Start the quiz again.');
+api.post('/section/:id/lock', async c => {
+  const uid = readUid(c);
+  if (!uid) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
+  const section = knownSection(c.req.param('id'));
+  if (!section) return fail(c, 404, 'unknown-section', 'No such section.');
 
   const body = (await c.req.json().catch(() => null)) as { qId?: unknown; choice?: unknown } | null;
   const qId = typeof body?.qId === 'string' ? body.qId : '';
-  const choice = typeof body?.choice === 'number' ? body.choice : -1;
-  if (!isKnownQuestion(qId)) return fail(c, 400, 'unknown-question', 'No such question.');
-  if (!Number.isInteger(choice) || choice < 0 || choice > 9) {
-    return fail(c, 400, 'invalid-body', 'Bad option index.');
+  const choice =
+    body?.choice === null || body?.choice === undefined
+      ? null
+      : typeof body.choice === 'number' && Number.isInteger(body.choice) && body.choice >= 0 && body.choice < 10
+        ? body.choice
+        : NaN;
+  if (!qId) return fail(c, 400, 'invalid-body', 'Which question?');
+  if (Number.isNaN(choice)) return fail(c, 400, 'invalid-body', 'Bad option index.');
+
+  const locked = await lockAnswer(section, uid, qId, choice);
+  if (locked.kind === 'no-attempt') return fail(c, 409, 'section-locked', 'That section is not open.');
+  if (locked.kind === 'finished') return fail(c, 409, 'section-done', 'That section is already closed.');
+  if (locked.kind === 'not-served') {
+    return fail(c, 409, 'not-served', 'That question was not served to you.');
+  }
+  if (locked.kind === 'already') {
+    return fail(c, 409, 'already-answered', 'That question is already locked.');
   }
 
-  const key = answerKey[qId];
-  const outcome = await tx(async client => {
-    const { rows } = await client.query<{ finished_at: Date | null }>(
-      'select finished_at from runs where id = $1 for update',
-      [runId]
-    );
-    if (!rows.length) return { kind: 'no-run' as const };
-    if (rows[0].finished_at) return { kind: 'finished' as const };
-
-    const correct = choice === key.answer;
-    const { rowCount } = await client.query(
-      `insert into picks (run_id, q_id, choice, correct) values ($1, $2, $3, $4)
-       on conflict (run_id, q_id) do nothing`,
-      [runId, qId, choice, correct]
-    );
-    if (!rowCount) return { kind: 'already' as const };
-
-    const picks = await loadPicks(runId, client);
-    return { kind: 'ok' as const, correct, score: scoreOf(picks), streak: currentStreakOf(picks) };
-  });
-
-  if (outcome.kind === 'no-run') return fail(c, 401, 'no-run', 'No run in progress.');
-  if (outcome.kind === 'finished') return fail(c, 409, 'run-finished', 'This run is already closed.');
-  if (outcome.kind === 'already') return fail(c, 409, 'already-answered', 'That question is already answered.');
-
-  return c.json<PickResponse>({
-    correct: outcome.correct,
-    answer: key.answer,
-    note: key.note,
-    score: outcome.score,
-    streak: outcome.streak
-  });
-});
-
-/**
- * Close the run. Idempotent — a double-submit returns the same readout rather
- * than restamping `finished_at` and inflating the visitor's time.
- */
-api.post('/run/finish', async c => {
-  const runId = readRunId(c);
-  if (!runId) return fail(c, 401, 'no-run', 'No run in progress.');
-
-  const ok = await tx(async client => {
-    const { rows } = await client.query<{ finished_at: Date | null }>(
-      'select finished_at from runs where id = $1 for update',
-      [runId]
-    );
-    if (!rows.length) return false;
-    if (rows[0].finished_at) return true;
-
-    const picks = await loadPicks(runId, client);
-    await client.query('update runs set finished_at = now(), score = $2, best_streak = $3 where id = $1', [
-      runId,
-      scoreOf(picks),
-      bestStreakOf(picks)
-    ]);
-    return true;
-  });
-  if (!ok) return fail(c, 401, 'no-run', 'No run in progress.');
-
-  const payload = await buildFinishResponse(runId);
-  if (!payload) return fail(c, 500, 'server-error', 'Could not build the readout.');
+  const payload: LockResponse = {
+    answered: locked.answered,
+    nextQId: locked.nextQId,
+    expired: locked.expired
+  };
   return c.json(payload);
 });
 
 /**
- * Public board. Names only — the address that comes back with a signed-in
- * account is for the organisers' export and never leaves the database.
+ * Close the section and fold it into the stage total. Idempotent — a double
+ * submit returns the same numbers rather than restamping anything.
  */
-api.get('/leaderboard', async c => {
-  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 20) || 20, 1), 100);
-  const runId = readRunId(c);
+api.post('/section/:id/finish', async c => {
+  const uid = readUid(c);
+  if (!uid) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
+  const section = knownSection(c.req.param('id'));
+  if (!section) return fail(c, 404, 'unknown-section', 'No such section.');
 
-  const { rows } = await db().query<{
-    id: string;
-    name: string;
-    score: number;
-    seconds: string;
-  }>(
-    `select r.id, p.name, r.score,
-            extract(epoch from (r.finished_at - r.started_at)) as seconds
-       from runs r join participants p on p.id = r.participant_id
-      where r.finished_at is not null
-      order by r.score desc, (r.finished_at - r.started_at) asc
-      limit $1`,
-    [limit]
-  );
-  const { rows: countRows } = await db().query<{ n: string }>(
-    'select count(*) as n from runs where finished_at is not null'
-  );
+  const done = await finishSection(section, uid);
+  if (done.kind === 'no-attempt') return fail(c, 409, 'section-locked', 'That section is not open.');
 
-  const payload: LeaderboardResponse = {
-    rows: rows.map((row, i) => ({
-      rank: i + 1,
-      name: row.name,
-      score: row.score,
-      seconds: Math.max(0, Math.round(Number(row.seconds))),
-      you: row.id === runId
-    })),
-    total: Number(countRows[0]?.n ?? 0)
+  const stages = await ladderFor(uid);
+  const stage = stages.find(s => s.id === section.stageId)!;
+  const payload: FinishResponse = { ...done.result, stage };
+  return c.json(payload);
+});
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+
+/**
+ * The password gate.
+ *
+ * One shared password, compared in constant time, behind a hard per-IP limit —
+ * six attempts an hour, which is unusable for guessing and plenty for an
+ * organiser who mistyped. The password itself is an environment variable with no
+ * default, so a deploy that forgot it fails at boot instead of serving an admin
+ * area with a known key.
+ */
+api.post('/admin/login', async c => {
+  const ip = clientIp(c);
+  if (!take(`admin:${ip}`, 6, 60 * 60_000)) {
+    return fail(c, 429, 'rate-limited', 'Too many attempts. Try again later.');
+  }
+  const body = (await c.req.json().catch(() => null)) as { password?: unknown } | null;
+  const given = Buffer.from(typeof body?.password === 'string' ? body.password : '');
+  const want = Buffer.from(env.adminPassword);
+  const ok = given.length === want.length && timingSafeEqual(given, want);
+  if (!ok) return fail(c, 401, 'not-admin', 'Wrong password.');
+  issueAdmin(c);
+  return c.json({ ok: true });
+});
+
+api.post('/admin/logout', c => {
+  clearAdmin(c);
+  return c.json({ ok: true });
+});
+
+api.get('/admin/session', c => c.json({ admin: isAdmin(c) }));
+
+/**
+ * Everything, ranked, with addresses. This is the leaderboard, and it exists
+ * only here: no participant-facing route returns another participant's row, a
+ * rank other than their own, or any score but their own total. The board is the
+ * organisers' instrument.
+ */
+api.get('/admin/board', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  const [boards, event] = await Promise.all([adminBoards(), eventState()]);
+  const payload: AdminStagesResponse = { boards, event };
+  return c.json(payload);
+});
+
+/**
+ * Start the quiz, or resume it after a stop.
+ *
+ * Until this is pressed, sign-in works and every section is shut: people register
+ * and wait, which is what a room full of participants does anyway. Resuming keeps
+ * the original start time so the elapsed clock measures the event; `restart: true`
+ * re-stamps it, for a false start before anyone has answered anything.
+ */
+api.post('/admin/event/start', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  const body = (await c.req.json().catch(() => null)) as { restart?: unknown } | null;
+  return c.json(await startEvent(body?.restart === true));
+});
+
+/** Stop it. See `eventRefusal` for exactly what stopping does and does not close. */
+api.post('/admin/event/stop', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  return c.json(await stopEvent());
+});
+
+/** Freeze a stage's cut. See the note on `takeCut` for why this is a moment. */
+api.post('/admin/cut', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  const body = (await c.req.json().catch(() => null)) as { stageId?: unknown } | null;
+  const stage = typeof body?.stageId === 'string' ? stageById(body.stageId) : null;
+  if (!stage) return fail(c, 400, 'invalid-body', 'Which stage?');
+  return c.json(await takeCut(stage));
+});
+
+/** Undo a cut taken too early. The stage reopens and nobody is eliminated. */
+api.post('/admin/cut/clear', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  const body = (await c.req.json().catch(() => null)) as { stageId?: unknown } | null;
+  const stage = typeof body?.stageId === 'string' ? stageById(body.stageId) : null;
+  if (!stage) return fail(c, 400, 'invalid-body', 'Which stage?');
+  await clearCut(stage);
+  return c.json({ ok: true });
+});
+
+/** CSV, for the organisers' own records. Same data as the board, one row each. */
+api.get('/admin/export', async c => {
+  if (!isAdmin(c)) return fail(c, 401, 'not-admin', 'Admin only.');
+  const boards = await adminBoards();
+  const cell = (value: string | number | null) => {
+    const s = value === null ? '' : String(value);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
-  // If the caller finished outside the visible window, append their own row so
-  // they always see where they landed.
-  if (runId && !payload.rows.some(r => r.you)) {
-    const { rows: mine } = await db().query<{ name: string; score: number; seconds: string }>(
-      `select p.name, r.score, extract(epoch from (r.finished_at - r.started_at)) as seconds
-         from runs r join participants p on p.id = r.participant_id
-        where r.id = $1 and r.finished_at is not null`,
-      [runId]
+  const lines: string[] = [];
+  for (const board of boards) {
+    lines.push(`# ${board.label} (cutoff ${board.cutoff})`);
+    lines.push(
+      ['rank', 'name', 'email', 'score', 'total', 'seconds', ...board.sectionIds.flatMap(id => [`${id}_score`, `${id}_seconds`]), 'eligible']
+        .map(cell)
+        .join(',')
     );
-    if (mine.length) {
-      payload.rows.push({
-        rank: await rankOf(runId),
-        name: mine[0].name,
-        score: mine[0].score,
-        seconds: Math.max(0, Math.round(Number(mine[0].seconds))),
-        you: true
-      });
+    for (const row of board.rows) {
+      lines.push(
+        [
+          row.rank,
+          row.name,
+          row.email,
+          row.score,
+          row.total,
+          row.seconds,
+          ...row.sections.flatMap(s => [s ? s.score : null, s ? s.seconds : null]),
+          row.eligible === null ? '' : row.eligible ? 'yes' : 'no'
+        ]
+          .map(cell)
+          .join(',')
+      );
     }
+    lines.push('');
   }
 
-  return c.json(payload);
+  return c.body(lines.join('\n'), 200, {
+    'content-type': 'text/csv; charset=utf-8',
+    'content-disposition': `attachment; filename="dor-quiz-${new Date().toISOString().slice(0, 10)}.csv"`
+  });
 });
 
-export { questionOrder, TOTAL };
+export { STAGES };
