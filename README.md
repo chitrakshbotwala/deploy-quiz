@@ -56,6 +56,14 @@ Migrations run themselves at boot. Sign-in needs a real OAuth client id with
 `http://localhost:3000` in its authorised JavaScript origins — there is
 deliberately no email fallback, so without one the gate has no way in.
 
+`dev` runs on Turbopack, and that is load-bearing rather than a preference.
+Next compiles `instrumentation.ts` for the edge runtime as well as for Node, and
+`serverExternalPackages` does not apply to that pass — so webpack follows
+`server/db.ts` into `pg`, fails to resolve `fs`, and the build error it raises
+makes every request in the session return 500. The `NEXT_RUNTIME` guard inside
+`register()` stops the code from *running* on the edge; it cannot stop the
+bundler from *resolving* it. `next build` is unaffected and stays on webpack.
+
 ## Editing questions
 
 Question text, options and accent live in `content/quizQuestions.ts`, which is
