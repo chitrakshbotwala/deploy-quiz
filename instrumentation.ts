@@ -21,10 +21,11 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
   if (process.env.NEXT_PHASE === 'phase-production-build') return;
 
-  const [{ assertEnv }, { assertQuizWellFormed, STAGES }, { sweep }] = await Promise.all([
+  const [{ assertEnv }, { assertQuizWellFormed, STAGES }, { sweep }, { BASE_PATH }] = await Promise.all([
     import('@/server/env'),
     import('@/server/quiz'),
-    import('@/server/ratelimit')
+    import('@/server/ratelimit'),
+    import('@/lib/basePath')
   ]);
 
   assertEnv();
@@ -35,5 +36,8 @@ export async function register() {
   setInterval(sweep, 5 * 60_000).unref();
 
   const ladder = STAGES.map(s => `${s.id}[${s.sectionIds.join('+')}]→${s.cutoff}`).join(' ');
-  console.log(`[api] ready — ${ladder}`);
+  // The mount is baked in at build time and is the one setting whose being wrong
+  // looks like a broken deploy rather than a misconfigured one — every URL 404s.
+  // Printing it means a glance at the boot log settles the question.
+  console.log(`[api] ready — served at ${BASE_PATH || '/'} — ${ladder}`);
 }

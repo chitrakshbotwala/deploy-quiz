@@ -138,7 +138,7 @@ file plus one id in that array. `secondsPerQuestion` is per section.
 ```bash
 cp .env.example .env.local     # then fill it in — see below
 npm ci
-npm run dev                    # http://localhost:3000/dor/quiz
+npm run dev                    # http://localhost:3000
 ```
 
 `.env.local` needs a real Firebase project: the web config (public, inlined into
@@ -160,11 +160,18 @@ webpack; Turbopack skips it.
 
 ### The base path
 
-The app is mounted at `/dor/quiz`, not at a domain root, and three things have to
-agree about that: Next's `basePath` (asset URLs), the client's fetch prefix, and
-the cookies' `path`. All three read `lib/basePath.ts`, which reads
-`NEXT_PUBLIC_BASE_PATH`. It is a **build-time** value — changing it means
-rebuilding, not restarting.
+The app serves from `/` by default, and a mount point is opt-in. Production is a
+wing of gdgkiit.in at `/dor/quiz` and sets `NEXT_PUBLIC_BASE_PATH=/dor/quiz` to say
+so; locally you leave it empty and the quiz is at `http://localhost:3000/`.
+
+Three things have to agree about the value: Next's `basePath` (asset URLs), the
+client's fetch prefix, and the cookies' `path`. All three read `lib/basePath.ts`.
+It is a **build-time** value — changing it means rebuilding, not restarting — and
+the boot log prints the mount it was built with, because a wrong one 404s
+everything and looks like a broken deploy rather than a misconfigured one.
+
+When serving from the root, `/dor/quiz` and everything under it 308-redirects to
+the equivalent path, so links and QR codes made before the change still work.
 
 ## The admin board
 

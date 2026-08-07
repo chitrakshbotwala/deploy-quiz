@@ -53,6 +53,7 @@ sudo install -d -m 750 -o root -g gdg /etc/dor-quiz
 sudo install -m 640 -o root -g gdg .env.example /etc/dor-quiz/env
 sudo openssl rand -hex 32          # paste into SESSION_COOKIE_SECRET
 sudo vim /etc/dor-quiz/env         # Firebase web config, service account, ADMIN_PASSWORD
+#                                  # AND NEXT_PUBLIC_BASE_PATH=/dor/quiz — see below
 
 # 3. Build. The NEXT_PUBLIC_* values are compiled in HERE, not at runtime, so the
 #    env file has to be readable by this command and not only by the service.
@@ -70,8 +71,15 @@ admin password is missing, and it refuses to start if a question file is
 malformed. Both are deliberate: the alternative is finding out mid-event.
 
 ```bash
-journalctl -u dor-quiz -n 20      # look for: [api] ready — stage1[s1a+s1b]→150 …
+journalctl -u dor-quiz -n 20   # [api] ready — served at /dor/quiz — stage1[…]→150 …
 ```
+
+**Check the mount in that line.** The app defaults to the domain root, because that
+is what a developer wants locally; this deployment is not at the root. If
+`NEXT_PUBLIC_BASE_PATH=/dor/quiz` was not set *at build time*, the boot log says
+`served at /` and every request Caddy forwards will 404 — the symptom looks like a
+broken app rather than a missing variable. It is a build-time value, so setting it
+afterwards means re-running `npm run build`, not restarting the service.
 
 ## Content-Security-Policy
 
