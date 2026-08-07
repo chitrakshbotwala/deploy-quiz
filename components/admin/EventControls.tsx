@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EventState } from '@/lib/quizApi';
 
 /**
  * Start, stop, and the clock since start.
  *
- * Its own component, with its own one-second tick, for a boring but real reason:
- * the board below it is up to a thousand rows, and hoisting the seconds into
- * `AdminApp` would re-render that table once a second for a two-digit change in
- * one corner of the screen.
+ * Its own component, with its own tick, for a boring but real reason: the board
+ * below it is up to a thousand rows, and hoisting the seconds into `AdminApp`
+ * would re-render that table four times a second for a two-digit change in one
+ * corner of the screen.
  *
  * The clock reads from the server's `startedAt`, corrected by the offset between
  * the two clocks — an organiser's laptop with a wrong system time still sees the
@@ -36,17 +36,34 @@ export default function EventControls({
   onStop: () => void;
   busy: boolean;
 }) {
-  const offset = Date.parse(event.now) - Date.now();
-  const startedMs = event.startedAt ? Date.parse(event.startedAt) - offset : null;
-  const stoppedMs = event.stoppedAt ? Date.parse(event.stoppedAt) - offset : null;
+  /**
+   * The clock offset, measured ONCE per response and then held.
+   *
+   * Recomputing `Date.parse(event.now) - Date.now()` on every render looks
+   * harmless and stops the clock dead: as real time advances `Date.now()` grows,
+   * the offset shrinks by exactly as much, and the elapsed time it feeds reduces to
+   * the constant `event.now - startedAt`. The tick fires, the render happens, and
+   * the number never moves. Pinning the offset to the response it was measured
+   * from is what makes the display live.
+   */
+  const offsetRef = useRef(0);
+  const measuredFrom = useRef<string | null>(null);
+  if (measuredFrom.current !== event.now) {
+    measuredFrom.current = event.now;
+    offsetRef.current = Date.parse(event.now) - Date.now();
+  }
+  const startedMs = event.startedAt ? Date.parse(event.startedAt) - offsetRef.current : null;
+  const stoppedMs = event.stoppedAt ? Date.parse(event.stoppedAt) - offsetRef.current : null;
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    // Only ticks while it is counting. A stopped clock is a fixed number and does
-    // not need a timer behind it.
+    // Only ticks while it is counting: a stopped clock is a fixed number and needs
+    // no timer behind it. Four times a second rather than once, so the display
+    // turns over on the second instead of up to a second late — this is a number
+    // read out to a room, and one that stutters reads as a frozen page.
     if (event.status !== 'running') return;
     setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
   }, [event.status, event.startedAt]);
 

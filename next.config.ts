@@ -23,6 +23,9 @@ const nextConfig: NextConfig = {
   // dynamic requires at runtime. Bundling it into the server chunks breaks those;
   // this leaves it as a plain node_modules require.
   serverExternalPackages: ['firebase-admin'],
+  // Nothing needs to know which framework serves this, and a version number in a
+  // response header is free reconnaissance.
+  poweredByHeader: false,
   eslint: {
     // The port carries the site's own components verbatim. Lint them on their
     // own schedule rather than blocking a deploy on a rule they predate.

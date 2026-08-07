@@ -48,6 +48,8 @@ export interface QuestionPanelProps {
   locking: boolean;
   /** A lock could not be recorded. Shown where the Continue affordance sits. */
   error: string | null;
+  /** A delivery is being retried. The rows stay locked and the panel says so. */
+  retrying: boolean;
   isLast: boolean;
   variant: 'field' | 'warp';
   sectionLabel: string;
@@ -68,6 +70,7 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
       fraction,
       locking,
       error,
+      retrying,
       isLast,
       variant,
       sectionLabel,
@@ -210,9 +213,11 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
               </div>
 
               <p className="mt-3 font-mono text-[0.625rem] uppercase tracking-[0.3em] text-white/35">
-                {locking
-                  ? 'Locking…'
-                  : `Keys ${KEYS.slice(0, question.options.length).join(' ')} · Enter to lock`}
+                {retrying
+                  ? 'Reconnecting…'
+                  : locking
+                    ? 'Locking…'
+                    : `Keys ${KEYS.slice(0, question.options.length).join(' ')} · Enter to lock`}
               </p>
 
               {/* ── Commit ─────────────────────────────────────────────────

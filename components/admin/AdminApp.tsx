@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { QuizApiError, adminApi, formatSeconds } from '@/lib/quizApi';
-import type { AdminBoardResponse, AdminStagesResponse } from '@/lib/quizApi';
+import type { AdminBoardResponse, AdminStagesResponse, EventState } from '@/lib/quizApi';
 import EventControls from './EventControls';
 
 /**
@@ -169,9 +169,16 @@ export default function AdminApp() {
   const [data, setData] = useState<AdminStagesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Start/stop only, so those two never disable the cut buttons or the table. */
+  const [eventBusy, setEventBusy] = useState(false);
 
-  const load = useCallback(() => {
-    setBusy(true);
+  /**
+   * Reads the board. `quiet` refreshes underneath whatever the organiser is doing
+   * — no spinner, no disabled buttons — which is what a background refresh after
+   * start or stop wants: those already showed their result instantly.
+   */
+  const load = useCallback((quiet = false) => {
+    if (!quiet) setBusy(true);
     adminApi
       .board()
       .then(res => {
@@ -181,9 +188,13 @@ export default function AdminApp() {
       })
       .catch((err: unknown) => {
         if (err instanceof QuizApiError && err.code === 'not-admin') setAuthed(false);
-        else setError(err instanceof QuizApiError ? err.message : 'Could not load the board.');
+        // A failed quiet refresh is not worth a red line over a board that is
+        // still on screen and still true.
+        else if (!quiet) setError(err instanceof QuizApiError ? err.message : 'Could not load the board.');
       })
-      .finally(() => setBusy(false));
+      .finally(() => {
+        if (!quiet) setBusy(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -194,6 +205,30 @@ export default function AdminApp() {
       .then(({ admin }) => (admin ? load() : setAuthed(false)))
       .catch(() => setAuthed(false));
   }, [load]);
+
+  /**
+   * Keeps the board current while it is open.
+   *
+   * An organiser watching the room fill up should not have to press Refresh to find
+   * out whether stage 1 is done. Thirty seconds, and only while the tab is actually
+   * in front of someone: the board is not a cheap read — it is every standing and
+   * every cut member for both stages, which at nine hundred participants is a few
+   * thousand documents — so an admin page left open on a spare laptop overnight
+   * should not keep paying for it.
+   */
+  useEffect(() => {
+    if (!authed) return;
+    const tick = () => {
+      if (document.visibilityState === 'visible') load(true);
+    };
+    const id = window.setInterval(tick, 30_000);
+    // Catch up immediately on returning to the tab, rather than up to 30s later.
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [authed, load]);
 
   const signIn = (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,14 +278,31 @@ export default function AdminApp() {
       .finally(() => setBusy(false));
   };
 
-  const setEvent = (fn: () => Promise<unknown>, confirmText?: string) => {
+  /**
+   * Start and stop, applied the moment the server confirms them.
+   *
+   * The route returns the new event state, so it goes straight into `data` and the
+   * status light and the clock turn over at once. The board is refreshed quietly
+   * afterwards. The earlier version waited for that whole refetch — a second or
+   * more with a thousand rows behind it — before anything on screen changed, which
+   * made Stop feel like it had not registered and invited a second click.
+   *
+   * `eventBusy` is separate from `busy` so pressing Stop does not grey out the cut
+   * buttons and the table underneath it.
+   */
+  const setEvent = (fn: () => Promise<EventState>, confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return;
-    setBusy(true);
+    setEventBusy(true);
     setError(null);
     fn()
-      .then(() => load())
-      .catch((err: unknown) => setError(err instanceof QuizApiError ? err.message : 'Could not change the quiz state.'))
-      .finally(() => setBusy(false));
+      .then(event => {
+        setData(current => (current ? { ...current, event } : current));
+        load(true);
+      })
+      .catch((err: unknown) =>
+        setError(err instanceof QuizApiError ? err.message : 'Could not change the quiz state.')
+      )
+      .finally(() => setEventBusy(false));
   };
 
   const startQuiz = (restart = false) =>
@@ -342,7 +394,7 @@ export default function AdminApp() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={load}
+              onClick={() => load()}
               disabled={busy}
               className="rounded-full border border-white/20 px-5 py-2 font-mono text-[0.8125rem] text-white/70 transition-colors hover:border-white/50 hover:text-white disabled:opacity-40"
             >
@@ -373,7 +425,7 @@ export default function AdminApp() {
         )}
 
         {data?.event && (
-          <EventControls event={data.event} onStart={startQuiz} onStop={stopQuiz} busy={busy} />
+          <EventControls event={data.event} onStart={startQuiz} onStop={stopQuiz} busy={eventBusy} />
         )}
 
         {data?.boards.map(board => (

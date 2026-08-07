@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useIsMobile } from '@/hooks/useMediaQuery';
 import { signOutFirebase, track, trackScreen } from '@/lib/firebase';
 import { QuizApiError, quizApi } from '@/lib/quizApi';
@@ -37,6 +37,15 @@ type View =
 
 export default function QuizApp() {
   const isMobile = useIsMobile();
+  // Read by every async continuation before it touches state. The polls and the
+  // sign-in round trip both outlive a fast unmount otherwise.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [state, setState] = useState<StateResponse | null>(null);
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [busySection, setBusySection] = useState<string | null>(null);
@@ -88,35 +97,43 @@ export default function QuizApp() {
   }, [view.kind]);
 
   /**
-   * While the quiz is not running, poll.
+   * While sitting on the ladder, poll.
    *
-   * A room of registered participants staring at "waiting for the organisers"
-   * must not have to be told to refresh — the ask would be shouted over a hall and
-   * half of them would miss it. Eight seconds is frequent enough to feel immediate
-   * and slow enough that a thousand idle tabs are a trickle rather than a load.
+   * Three things can change a participant's screen without them touching it: the
+   * organisers starting the quiz, stopping it, or freezing a cut. Every one of
+   * those is a moment where the alternative is shouting "refresh your page" across
+   * a hall and being heard by half the room — so the page finds out by itself.
    *
-   * Only on the ladder, and only while waiting: a running quiz needs no poll,
-   * because the state that matters then arrives with every lock.
+   * It polls `/event`, not `/state`: one cached document against nine Firestore
+   * reads, which at nine hundred open tabs is the difference between a trickle and
+   * a bill. `revision` is a fingerprint of all three of those events, so a change
+   * anywhere in them is one string comparison here, and only then is the full
+   * ladder worth fetching.
+   *
+   * Not while a section is open — a run has no use for this and the questions are
+   * already carrying their own state.
    */
   useEffect(() => {
-    if (view.kind !== 'ladder') return;
-    if (!state || state.event.status === 'running') return;
-    const waitingOn = state.event.status;
+    if (view.kind !== 'ladder' && view.kind !== 'eliminated') return;
+    if (!state) return;
+    const seen = state.event.revision;
     const id = window.setInterval(() => {
       quizApi
         .event()
         .then(event => {
-          // The cheap poll only carries the event. When it has not moved, patch it
-          // in — the `now` it brings keeps any clock honest — and stop there. When
-          // it HAS moved, the ladder is worth the nine reads it costs.
-          if (event.status === waitingOn) {
+          if (!mounted.current) return;
+          if (event.revision === seen) {
+            // Nothing moved. Patch the event in anyway: the `now` it carries keeps
+            // the waiting copy's own sense of time honest.
             setState(current => (current ? { ...current, event } : current));
             return;
           }
-          quizApi
-            .state()
-            .then(next => landOn(next, false))
-            .catch(() => undefined);
+          return quizApi.state().then(next => {
+            if (!mounted.current) return;
+            // `allowEliminated` on: a cut that just landed the wrong way is exactly
+            // the case where the participant needs the screen that explains it.
+            landOn(next);
+          });
         })
         .catch(() => undefined);
     }, 8_000);

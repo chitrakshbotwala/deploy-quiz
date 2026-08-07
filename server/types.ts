@@ -26,6 +26,14 @@ export interface EventState {
   /** Server clock, ISO. Null until the first start. Survives a stop. */
   startedAt: string | null;
   stoppedAt: string | null;
+  /**
+   * Fingerprint of everything that can change a participant's screen without them
+   * acting: the event's own state, and whether either cut is frozen. A waiting page
+   * polls this cheap endpoint and refetches the expensive ladder only when the
+   * string moves — so a frozen cut reaches every open tab in seconds, and an idle
+   * tab costs almost nothing.
+   */
+  revision: string;
   /** Server clock at the moment of the response, so a client can correct drift. */
   now: string;
 }
@@ -171,6 +179,12 @@ export interface LockResponse {
   answered: number;
   /** Null when the section is out of questions. */
   nextQId: string | null;
+  /**
+   * The next question, already served, with its deadline. Comes back with the lock
+   * so one question follows another in a single round trip — see the note on
+   * `lockAnswer`. Null when the section has no question left.
+   */
+  serve: ServeResponse | null;
   /**
    * True when the deadline had already passed. The client uses it only to stop
    * showing a selection it did not get to lock — never to say "wrong".

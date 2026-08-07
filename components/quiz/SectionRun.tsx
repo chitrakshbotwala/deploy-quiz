@@ -167,6 +167,7 @@ export default function SectionRun({
               fraction={section.fraction}
               locking={phase === 'locking'}
               error={error}
+              retrying={section.retrying}
               isLast={section.isLast}
               variant={useField ? 'field' : 'warp'}
               sectionLabel={run.section.label}

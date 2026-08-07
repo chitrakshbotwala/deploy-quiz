@@ -43,10 +43,18 @@ so it opens by itself when the button is pressed — nobody has to be told to
 refresh a hall full of laptops.
 
 **Stop quiz** shuts the door on new sections and new questions. It deliberately
-does **not** cancel a question already on someone's screen: their lock still
-counts and their section still closes out, because throwing away an answer
-somebody already gave is worse than ending a section early. Resuming keeps the
-original start time, so the elapsed clock on the board measures the event.
+does **not** cancel a question already on someone's screen: the lock still lands
+and counts, because throwing away an answer somebody already gave is worse than
+ending a section early. What it does not do is hand back another question — so the
+section closes, scores, and is ranked. Someone whose tab died mid-section can still
+reopen it after a stop for exactly that reason; they get no new question, just the
+chance to close out. Resuming keeps the original start time, so the elapsed clock
+on the board measures the event.
+
+Freezing a cut closes any attempt in that stage that was started and never
+finished, before it ranks anyone. An unfinished attempt has no stage total and so
+would not be ranked at all — dropping a participant from the event for a dead
+laptop is not a result anybody wants.
 
 ## Rules the server enforces
 

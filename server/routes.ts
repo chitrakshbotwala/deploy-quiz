@@ -177,17 +177,27 @@ function eventRefusal(event: EventState): { error: ApiError['error']; message: s
 api.post('/section/:id/open', async c => {
   const uid = readUid(c);
   if (!uid) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
+  if (overRunBudget(uid)) return fail(c, 429, 'rate-limited', 'Too many requests. Slow down.');
   const section = knownSection(c.req.param('id'));
   if (!section) return fail(c, 404, 'unknown-section', 'No such section.');
 
   const [identity, event] = await Promise.all([participantOf(uid), eventState()]);
   if (!identity) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
-  const refused = eventRefusal(event);
-  if (refused) return fail(c, 409, refused.error, refused.message);
 
   const ladder = await ladderFor(uid);
   const state = sectionStateIn(ladder, section.id);
   if (!state) return fail(c, 404, 'unknown-section', 'No such section.');
+
+  // The event gate applies to STARTING a section, not to returning to one that is
+  // already open. Someone whose tab died mid-section while the quiz was live has to
+  // be able to come back and close it out after a stop — otherwise their attempt
+  // stays unfinished, and an unfinished attempt is not ranked at all. They get no
+  // new question either way: /serve is gated, so reopening hands them a section
+  // with nothing left to answer, which closes and scores it.
+  const refused = eventRefusal(event);
+  if (refused && state.status !== 'in-progress') {
+    return fail(c, 409, refused.error, refused.message);
+  }
   if (state.status === 'barred') {
     return fail(c, 403, 'not-eligible', 'This round is not open to you.');
   }
@@ -225,10 +235,25 @@ api.post('/section/:id/open', async c => {
   return c.json(payload);
 });
 
+/**
+ * Per-account budget on the hot routes.
+ *
+ * The database already bounds what these can DO — a question locks once, ever —
+ * but it does not bound how often a client may ask, and a retry loop in a broken
+ * tab can ask hundreds of times a minute. Each of those is a Firestore
+ * transaction. This is the ceiling on the damage one wedged browser can bill,
+ * pitched far above what a real run needs: 30 questions at 10 seconds is well
+ * under a request a second.
+ */
+function overRunBudget(uid: string): boolean {
+  return !take(`run:${uid}`, 240, 60_000);
+}
+
 /** The next question and its deadline, both chosen by the server. */
 api.post('/section/:id/serve', async c => {
   const uid = readUid(c);
   if (!uid) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
+  if (overRunBudget(uid)) return fail(c, 429, 'rate-limited', 'Too many requests. Slow down.');
   const section = knownSection(c.req.param('id'));
   if (!section) return fail(c, 404, 'unknown-section', 'No such section.');
 
@@ -263,6 +288,7 @@ api.post('/section/:id/serve', async c => {
 api.post('/section/:id/lock', async c => {
   const uid = readUid(c);
   if (!uid) return fail(c, 401, 'not-signed-in', 'Sign in to start.');
+  if (overRunBudget(uid)) return fail(c, 429, 'rate-limited', 'Too many requests. Slow down.');
   const section = knownSection(c.req.param('id'));
   if (!section) return fail(c, 404, 'unknown-section', 'No such section.');
 
@@ -277,7 +303,10 @@ api.post('/section/:id/lock', async c => {
   if (!qId) return fail(c, 400, 'invalid-body', 'Which question?');
   if (Number.isNaN(choice)) return fail(c, 400, 'invalid-body', 'Bad option index.');
 
-  const locked = await lockAnswer(section, uid, qId, choice);
+  // The lock is never refused — an answer already given must land. What the event's
+  // state decides is whether another question comes back with it.
+  const event = await eventState();
+  const locked = await lockAnswer(section, uid, qId, choice, event.status === 'running');
   if (locked.kind === 'no-attempt') return fail(c, 409, 'section-locked', 'That section is not open.');
   if (locked.kind === 'finished') return fail(c, 409, 'section-done', 'That section is already closed.');
   if (locked.kind === 'not-served') {
@@ -290,7 +319,17 @@ api.post('/section/:id/lock', async c => {
   const payload: LockResponse = {
     answered: locked.answered,
     nextQId: locked.nextQId,
-    expired: locked.expired
+    expired: locked.expired,
+    // Served inside the same transaction as the lock. /serve still exists for a
+    // resume, but the run never needs it question-to-question any more.
+    serve: locked.serve
+      ? {
+          qId: locked.serve.qId,
+          servedAt: locked.serve.servedAt.toDate().toISOString(),
+          deadlineAt: locked.serve.deadlineAt.toDate().toISOString(),
+          now: new Date().toISOString()
+        }
+      : null
   };
   return c.json(payload);
 });

@@ -59,8 +59,18 @@ import type {
  * fastest possible run).
  */
 
-/** How late a lock may arrive and still count, to cover the network round-trip. */
-const LOCK_GRACE_MS = 1_200;
+/**
+ * How late a lock may arrive and still count.
+ *
+ * The client posts at the deadline; this covers the flight. Two and a half seconds
+ * is deliberately generous — on campus wifi a round trip of over a second is
+ * ordinary, and the failure it prevents (someone answering in time and being
+ * recorded as not having answered) is far worse than the one it allows (someone
+ * gaining a sliver past the buzzer). The allowance does not make the question
+ * longer: `elapsedMs` is still capped at the budget, so a late lock is scored on
+ * time it did not save.
+ */
+const LOCK_GRACE_MS = 2_500;
 
 const eventRef = () => fs().collection('event').doc('state');
 const participants = () => fs().collection('participants');
@@ -173,29 +183,71 @@ interface EventDoc {
  * start sees it immediately rather than up to two seconds later.
  */
 const EVENT_CACHE = Symbol.for('dor-quiz.event');
-type EventCache = typeof globalThis & { [EVENT_CACHE]?: { at: number; doc: EventDoc | null } };
+interface EventSnapshot {
+  doc: EventDoc | null;
+  /** Cut timestamps, one per stage, in stage order. */
+  cuts: (number | null)[];
+}
+type EventCache = typeof globalThis & { [EVENT_CACHE]?: { at: number; snapshot: EventSnapshot } };
 const EVENT_TTL_MS = 2_000;
 
-function eventPayload(doc: EventDoc | null): EventState {
+/**
+ * A fingerprint of everything that can move a participant's screen without them
+ * touching it: the event starting or stopping, and either cut being frozen or
+ * undone.
+ *
+ * It exists so a page sitting on the ladder can find out that something changed
+ * without paying for the ladder itself. /state costs nine reads to build; this is
+ * one cached document plus two, shared by every client. A participant who finished
+ * stage 1 and is waiting to hear therefore sees stage 2 open — or sees their rank
+ * and a closed door — within seconds of the organiser pressing the button, with
+ * nobody reloading anything.
+ */
+function revisionOf(snapshot: EventSnapshot): string {
+  const { doc, cuts } = snapshot;
+  return [
+    doc?.status ?? 'idle',
+    doc?.startedAt?.toMillis() ?? 0,
+    doc?.stoppedAt?.toMillis() ?? 0,
+    ...cuts.map(at => at ?? 0)
+  ].join(':');
+}
+
+function eventPayload(snapshot: EventSnapshot): EventState {
+  const { doc } = snapshot;
   return {
     status: doc?.status ?? 'idle',
     startedAt: iso(doc?.startedAt ?? null),
     stoppedAt: iso(doc?.stoppedAt ?? null),
+    revision: revisionOf(snapshot),
     now: new Date().toISOString()
   };
 }
 
-function cacheEvent(doc: EventDoc | null): void {
-  (globalThis as EventCache)[EVENT_CACHE] = { at: Date.now(), doc };
+function cacheEvent(snapshot: EventSnapshot): void {
+  (globalThis as EventCache)[EVENT_CACHE] = { at: Date.now(), snapshot };
+}
+
+/** Drops the cache so the next read is fresh. Called by anything that writes. */
+function bustEvent(): void {
+  delete (globalThis as EventCache)[EVENT_CACHE];
 }
 
 export async function eventState(): Promise<EventState> {
   const cache = (globalThis as EventCache)[EVENT_CACHE];
-  if (cache && Date.now() - cache.at < EVENT_TTL_MS) return eventPayload(cache.doc);
-  const snap = await eventRef().get();
-  const doc = snap.exists ? (snap.data() as EventDoc) : null;
-  cacheEvent(doc);
-  return eventPayload(doc);
+  if (cache && Date.now() - cache.at < EVENT_TTL_MS) return eventPayload(cache.snapshot);
+
+  // One round trip for the event and both stage documents.
+  const snaps = await fs().getAll(eventRef(), ...STAGES.map(stage => stageDoc(stage.id)));
+  const snapshot: EventSnapshot = {
+    doc: snaps[0].exists ? (snaps[0].data() as EventDoc) : null,
+    cuts: snaps.slice(1).map(snap => {
+      const meta = snap.exists ? (snap.data() as Partial<StageMetaDoc>) : null;
+      return meta?.cutAt ? meta.cutAt.toMillis() : null;
+    })
+  };
+  cacheEvent(snapshot);
+  return eventPayload(snapshot);
 }
 
 /**
@@ -218,8 +270,9 @@ export async function startEvent(restart = false): Promise<EventState> {
     tsx.set(eventRef(), doc);
     return doc;
   });
-  cacheEvent(written);
-  return eventPayload(written);
+  void written;
+  bustEvent();
+  return eventState();
 }
 
 /** Stops the quiz. See the note on the route for what "stopped" does and does not close. */
@@ -236,8 +289,9 @@ export async function stopEvent(): Promise<EventState> {
     tsx.set(eventRef(), doc);
     return doc;
   });
-  cacheEvent(written);
-  return eventPayload(written);
+  void written;
+  bustEvent();
+  return eventState();
 }
 
 // ── Participants ─────────────────────────────────────────────────────────────
@@ -507,12 +561,17 @@ export async function serveNext(section: SectionConfig, uid: string): Promise<Se
   const order = questionOrder(section.id);
 
   return fs().runTransaction(async tsx => {
-    const attemptSnap = await tsx.get(attemptRef);
+    // Both reads in flight together, and both before any write. Sequential gets
+    // here cost a second round trip inside the transaction, which is a second the
+    // participant spends looking at a blank panel.
+    const [attemptSnap, answerSnaps] = await Promise.all([
+      tsx.get(attemptRef),
+      tsx.get(answers(section.id, uid))
+    ]);
     if (!attemptSnap.exists) return { kind: 'no-attempt' as const };
     const attempt = attemptSnap.data() as AttemptDoc;
     if (attempt.finishedAt) return { kind: 'finished' as const };
 
-    const answerSnaps = await tsx.get(answers(section.id, uid));
     const byId = new Map(answerSnaps.docs.map(d => [d.id, d.data() as AnswerDoc]));
     const now = Timestamp.now();
 
@@ -565,7 +624,14 @@ function lockExpired(
 }
 
 export type LockResult =
-  | { kind: 'locked'; answered: number; nextQId: string | null; expired: boolean }
+  | {
+      kind: 'locked';
+      answered: number;
+      nextQId: string | null;
+      expired: boolean;
+      /** The next question, already served. Null when the section is out of them. */
+      serve: Serve | null;
+    }
   | { kind: 'no-attempt' }
   | { kind: 'finished' }
   | { kind: 'not-served' }
@@ -579,12 +645,27 @@ export type LockResult =
  * is recorded as no answer at all, which is the same outcome as never clicking.
  * That is what makes the ten seconds real: the client's countdown is a drawing of
  * this rule, not the rule itself.
+ *
+ * The next question is served in the SAME transaction and returned with the lock.
+ * Two calls per question — lock, then ask for the next — meant two round trips
+ * between one question and the next, and on the wifi this runs on that was over
+ * two seconds of blank panel out of a ten-second budget. One call also means one
+ * failure point instead of two, and no window in which a lock has landed but the
+ * client does not yet know what to draw.
  */
 export async function lockAnswer(
   section: SectionConfig,
   uid: string,
   qId: string,
-  choice: number | null
+  choice: number | null,
+  /**
+   * Whether to hand out the next question with the lock. False once the organisers
+   * have stopped the quiz: the lock itself must still land — the answer was already
+   * given — but stop has to mean stop, and a lock that kept serving would walk a
+   * participant through the rest of the section after the event was called. With no
+   * next question the client closes the section, which scores it.
+   */
+  allowNext: boolean
 ): Promise<LockResult> {
   const attemptRef = attempts(section.id).doc(uid);
   const answerRef = answers(section.id, uid).doc(qId);
@@ -604,6 +685,7 @@ export async function lockAnswer(
 
     const answer = answerSnap.data() as AnswerDoc;
     if (answer.lockedAt) return { kind: 'already' as const };
+    const byId = new Map(answerSnaps.docs.map(d => [d.id, d.data() as AnswerDoc]));
 
     const now = Timestamp.now();
     const budgetMs = section.secondsPerQuestion * 1000;
@@ -625,8 +707,41 @@ export async function lockAnswer(
       answerSnaps.docs.filter(d => (d.data() as AnswerDoc).lockedAt).map(d => d.id)
     );
     locked.add(qId);
-    const nextQId = order.find(id => !locked.has(id)) ?? null;
-    return { kind: 'locked' as const, answered: locked.size, nextQId, expired };
+
+    // Serve the next one on the way out. Anything already served but unlocked is
+    // handed back with its ORIGINAL deadline — the same rule as `serveNext`, so a
+    // retried lock cannot mint a fresh ten seconds for a question that was already
+    // on screen.
+    let serve: Serve | null = null;
+    for (const id of allowNext ? order : []) {
+      if (locked.has(id)) continue;
+      const existing = byId.get(id);
+      if (existing && !existing.lockedAt) {
+        serve = { qId: id, servedAt: existing.servedAt, deadlineAt: existing.deadlineAt };
+        break;
+      }
+      if (existing) continue;
+      const deadlineAt = Timestamp.fromMillis(now.toMillis() + budgetMs);
+      tsx.set(answers(section.id, uid).doc(id), {
+        qId: id,
+        servedAt: now,
+        deadlineAt,
+        lockedAt: null,
+        choice: null,
+        correct: false,
+        elapsedMs: 0
+      } satisfies AnswerDoc);
+      serve = { qId: id, servedAt: now, deadlineAt };
+      break;
+    }
+
+    return {
+      kind: 'locked' as const,
+      answered: locked.size,
+      nextQId: serve?.qId ?? null,
+      expired,
+      serve
+    };
   });
 }
 
@@ -649,7 +764,18 @@ export async function finishSection(section: SectionConfig, uid: string): Promis
   const stage = stageById(section.stageId)!;
 
   return fs().runTransaction(async tsx => {
-    const attemptSnap = await tsx.get(attemptRef);
+    // EVERY read first. Firestore rejects a transaction that reads after writing,
+    // and this one writes in the middle of its loop (closing questions that were
+    // served and never locked) — so the standings document has to be fetched up
+    // here, alongside the others, even though it is not used until the end. Moving
+    // that get down to where it reads naturally is exactly the bug that took
+    // /finish out with "transactions require all reads to be executed before all
+    // writes"; the ordering is a constraint of the API, not a style preference.
+    const [attemptSnap, answerSnaps, standingSnap] = await Promise.all([
+      tsx.get(attemptRef),
+      tsx.get(answers(section.id, uid)),
+      tsx.get(standingRef)
+    ]);
     if (!attemptSnap.exists) return { kind: 'no-attempt' as const };
     const attempt = attemptSnap.data() as AttemptDoc;
 
@@ -660,7 +786,6 @@ export async function finishSection(section: SectionConfig, uid: string): Promis
       };
     }
 
-    const answerSnaps = await tsx.get(answers(section.id, uid));
     const byId = new Map(answerSnaps.docs.map(d => [d.id, d.data() as AnswerDoc]));
     const now = Timestamp.now();
 
@@ -685,9 +810,9 @@ export async function finishSection(section: SectionConfig, uid: string): Promis
 
     tsx.update(attemptRef, { finishedAt: now, score, elapsedMs });
 
-    // Fold into the stage total. Read inside the transaction so two sections
-    // finishing at once cannot both write a total computed without the other.
-    const standingSnap = await tsx.get(standingRef);
+    // Fold into the stage total. Read in the same transaction (above) so two
+    // sections finishing at once cannot both write a total computed without the
+    // other.
     const previous = standingSnap.exists ? (standingSnap.data() as StandingDoc) : null;
     const sections = { ...(previous?.sections ?? {}), [section.id]: { score, elapsedMs } };
     const totalScore = Object.values(sections).reduce((n, s) => n + s.score, 0);
@@ -743,7 +868,45 @@ export interface CutSummary {
  * taken too early: rows for participants who have since finished are added, and
  * `eligible` is recomputed for everyone.
  */
+/**
+ * Closes every attempt in a stage that was started and never finished.
+ *
+ * Run immediately before a cut, and the reason is fairness rather than tidiness:
+ * an unfinished attempt has no stage total, so it is not ranked, so a participant
+ * whose laptop shut or whose section was cut short by the organisers pressing stop
+ * would be dropped from the event entirely — for something that was not their
+ * doing. Closing the attempt scores what they answered and charges the questions
+ * they never saw at full budget, which ranks them honestly low instead of nowhere.
+ *
+ * Idempotent, because `finishSection` is: an attempt already closed is returned
+ * unchanged.
+ */
+async function closeStrandedAttempts(stage: StageConfig): Promise<number> {
+  let closed = 0;
+  for (const section of sectionsOfStage(stage.id)) {
+    // Single-field filter, so Firestore's automatic index serves it.
+    const open = await attempts(section.id).where('finishedAt', '==', null).get();
+    // Eight at a time. One at a time makes an organiser wait a transaction per
+    // stranded participant — with fifty of them that is a minute of a hung request
+    // and a real chance of the proxy giving up first. All at once would open a
+    // transaction per participant against one document each; eight keeps the
+    // request quick without turning a cut into a thundering herd.
+    const CONCURRENCY = 8;
+    for (let i = 0; i < open.docs.length; i += CONCURRENCY) {
+      const batch = open.docs.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(batch.map(doc => finishSection(section, doc.id)));
+      closed += results.filter(r => r.kind === 'finished').length;
+    }
+  }
+  return closed;
+}
+
 export async function takeCut(stage: StageConfig): Promise<CutSummary> {
+  // Before anyone is ranked, make sure everyone who took part has a total to be
+  // ranked on.
+  const stranded = await closeStrandedAttempts(stage);
+  if (stranded) console.log(`[cut] ${stage.id}: closed ${stranded} unfinished attempt(s) before ranking`);
+
   const snaps = await standings(stage.id).get();
   const rows = snaps.docs
     .map(d => d.data() as StandingDoc)
@@ -781,6 +944,8 @@ export async function takeCut(stage: StageConfig): Promise<CutSummary> {
     eligible
   };
   await stageDoc(stage.id).set(meta, { merge: true });
+  // The revision every waiting client polls is partly made of this timestamp.
+  bustEvent();
 
   return {
     stageId: stage.id,
@@ -804,6 +969,7 @@ export async function clearCut(stage: StageConfig): Promise<void> {
     { cutAt: FieldValue.delete(), cutoff: FieldValue.delete(), ranked: FieldValue.delete(), eligible: FieldValue.delete() },
     { merge: true }
   );
+  bustEvent();
 }
 
 // ── The admin board ──────────────────────────────────────────────────────────

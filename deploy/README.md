@@ -87,18 +87,25 @@ Everything is driven from `/dor/quiz/admin`. The second round stays shut until t
 first cut is frozen, and nothing is open at all until you press start:
 
 0. **Start quiz.** Before this, people can sign in and register — they see
-   "waiting for the organisers", and that page opens by itself when you start.
-   The board shows a clock counting from the moment you pressed it. **Stop quiz**
-   closes it again; a question already on screen still locks and still counts.
+   "waiting for the organisers", and that page opens by itself when you start (it
+   polls, so nobody needs telling to refresh). The board shows a live clock from
+   the moment you pressed it. **Stop quiz** closes it again: a question already on
+   screen still locks and still counts, but no new one is handed out, so those
+   sections close and score themselves.
 1. Stage 1 opens; participants do section 1, then section 2.
 2. When the room is done, **Freeze cut (top 150)** on Stage 1. Everyone below the
    line now sees their rank and a closed door; the top 150 see stage 2 open.
 3. Stage 2 runs. Then **Freeze cut (top 75)** — those 75 are the finalists.
 4. **Stop quiz**, then **Export CSV** for the records.
 
+Freezing also closes out any attempt in that stage still sitting unfinished, so a
+participant whose laptop died is ranked on what they answered rather than dropped.
+
 `Undo cut` exists for the cut taken five minutes too early. It reopens the round
 and nobody stays eliminated. Re-freezing re-ranks from scratch, including anyone
 who finished in between.
+
+The board refreshes itself every 30 seconds while the tab is in front of you.
 
 ## Firewall
 
