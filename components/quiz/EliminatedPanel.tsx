@@ -42,7 +42,7 @@ export default function EliminatedPanel({
         className="pointer-events-none absolute inset-0"
         style={{ background: 'radial-gradient(135% 105% at 50% 45%, transparent 52%, #00000059)' }}
       />
-      <div className="quiz-scroll relative z-10 flex h-full flex-col overflow-y-auto px-[clamp(1.5rem,6vw,7rem)] pb-[clamp(1.75rem,6vh,4rem)] pt-[clamp(5.5rem,13vh,8.5rem)]">
+      <div className="quiz-scroll relative z-10 flex h-full flex-col overflow-y-auto px-[clamp(1.5rem,6vw,7rem)] pb-[clamp(1.75rem,6vh,4rem)] pt-[var(--quiz-pad-top)]">
         <header className="shrink-0">
           <div className="flex items-baseline justify-between gap-6">
             <span
@@ -52,7 +52,7 @@ export default function EliminatedPanel({
             >
               {stage.label} · result
             </span>
-            <span data-warp="eyebrow" className="font-mono text-[0.7rem] tracking-[0.3em] text-white/40 md:text-xs">
+            <span data-warp="eyebrow" className="font-mono text-[0.7rem] tracking-[0.3em] text-white/60 md:text-xs">
               Final
             </span>
           </div>
@@ -63,10 +63,14 @@ export default function EliminatedPanel({
           />
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col justify-center py-[clamp(1.25rem,3.5vh,2.5rem)]">
+        {/* Centred while it fits, scrolled once it does not — which needs the
+            content-based minimum a `min-h-0` would remove. Shrinkable, this
+            would squash to the frame at a zoomed-in viewport and lay itself over
+            the footer rather than overflowing the scroller above it. */}
+        <div className="flex flex-1 flex-col justify-center py-[clamp(1.25rem,3.5vh,2.5rem)]">
           <div className="max-w-[46rem]">
             <p className="flex items-baseline gap-3 font-extrabold leading-[0.82] tracking-[-0.04em]">
-              <span aria-hidden="true" className="font-mono text-[clamp(0.9rem,1.6vw,1.15rem)] font-medium tracking-[0.24em] text-white/35">
+              <span aria-hidden="true" className="font-mono text-[clamp(0.9rem,1.6vw,1.15rem)] font-medium tracking-[0.24em] text-white/55">
                 #
               </span>
               <span
@@ -77,7 +81,7 @@ export default function EliminatedPanel({
                 {rank}
               </span>
               {of ? (
-                <span className="font-mono text-[clamp(0.9rem,1.6vw,1.15rem)] font-medium tracking-[0.24em] text-white/40">
+                <span className="font-mono text-[clamp(0.9rem,1.6vw,1.15rem)] font-medium tracking-[0.24em] text-white/60">
                   of {of}
                 </span>
               ) : null}
@@ -89,13 +93,13 @@ export default function EliminatedPanel({
             >
               Sorry — your rank was {rank}, and you are not eligible for {nextStageLabel}.
             </h2>
-            <p data-warp="tagline" className="mt-3 max-w-[58ch] text-[0.9rem] leading-[1.6] text-white/55">
+            <p data-warp="tagline" className="mt-3 max-w-[58ch] text-[0.9rem] leading-[1.6] text-white/70">
               {stage.label} took the top {stage.cutoff}
               {of ? ` of ${of} who finished it` : ''}. You finished on {stage.score} of {stage.total} in{' '}
               {formatSeconds(stage.seconds)} of answering time — where scores tied, the faster time went
               through.
             </p>
-            <p data-warp="meta" className="mt-4 max-w-[58ch] text-[0.8125rem] leading-[1.6] text-white/40">
+            <p data-warp="meta" className="mt-4 max-w-[58ch] text-[0.8125rem] leading-[1.6] text-white/60">
               Nothing else to do here, and nothing to reload — this is the frozen result, not a live
               position. Thanks for flying it.
             </p>

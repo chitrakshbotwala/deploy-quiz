@@ -219,7 +219,7 @@ export default function QuizApp() {
 
       {view.kind === 'loading' && (
         <main className="relative z-10 flex h-full items-center justify-center">
-          <p className="font-mono text-[0.7rem] uppercase tracking-[0.3em] text-white/35">Establishing link…</p>
+          <p className="font-mono text-[0.7rem] uppercase tracking-[0.3em] text-white/55">Establishing link…</p>
         </main>
       )}
 
