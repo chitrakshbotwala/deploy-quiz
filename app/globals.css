@@ -674,6 +674,18 @@ body::-webkit-scrollbar {
   display: none;
 }
 
+/* The gap every quiz panel leaves for the fixed nav above it.
+ *
+ * The floor is what matters and it is not a taste value: the nav measures 110px
+ * and does not scale with the viewport, so anything under 7rem puts a heading
+ * behind it. `13vh` only clears the nav past ~850px of viewport height, which is
+ * a browser zoomed to 150% — the same short-viewport case, arriving without the
+ * window being resized. One declaration because all five panels share the frame,
+ * and the last time this lived in five class strings they drifted apart. */
+:root {
+  --quiz-pad-top: clamp(7rem, 13vh, 8.5rem);
+}
+
 /* Run progress. A hairline that fills, not a rounded pill with a percentage
    inside it — the telemetry rail it sits in is made of hairlines already. */
 .quiz-progress {

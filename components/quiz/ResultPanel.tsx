@@ -67,7 +67,7 @@ const ResultPanel = forwardRef<
         className="pointer-events-none absolute inset-0"
         style={{ background: 'radial-gradient(135% 105% at 50% 45%, transparent 52%, #00000059)' }}
       />
-      <div className="quiz-scroll relative z-10 flex h-full flex-col overflow-y-auto px-[clamp(1.5rem,6vw,7rem)] pb-[clamp(1.75rem,6vh,4rem)] pt-[clamp(5.5rem,13vh,8.5rem)]">
+      <div className="quiz-scroll relative z-10 flex h-full flex-col overflow-y-auto px-[clamp(1.5rem,6vw,7rem)] pb-[clamp(1.75rem,6vh,4rem)] pt-[var(--quiz-pad-top)]">
         <header className="shrink-0">
           <div className="flex items-baseline justify-between gap-6">
             <span
@@ -77,7 +77,7 @@ const ResultPanel = forwardRef<
             >
               {sectionLabel}
             </span>
-            <span data-warp="eyebrow" className="font-mono text-[0.7rem] tracking-[0.3em] text-white/40 md:text-xs">
+            <span data-warp="eyebrow" className="font-mono text-[0.7rem] tracking-[0.3em] text-white/60 md:text-xs">
               Recorded
             </span>
           </div>
@@ -88,7 +88,11 @@ const ResultPanel = forwardRef<
           />
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col justify-center py-[clamp(1.25rem,3.5vh,2.5rem)]">
+        {/* Centred while it fits, scrolled once it does not — which needs the
+            content-based minimum a `min-h-0` would remove. Shrinkable, this
+            would squash to the frame at a zoomed-in viewport and lay itself over
+            the footer rather than overflowing the scroller above it. */}
+        <div className="flex flex-1 flex-col justify-center py-[clamp(1.25rem,3.5vh,2.5rem)]">
           <div className="max-w-[46rem]">
             <p className="flex items-baseline gap-3 font-extrabold leading-[0.82] tracking-[-0.04em]">
               {/* `--lit` has to land on the glyph itself: `.quiz-score` declares its
@@ -101,7 +105,7 @@ const ResultPanel = forwardRef<
               >
                 {String(score).padStart(2, '0')}
               </span>
-              <span className="font-mono text-[clamp(0.9rem,1.6vw,1.15rem)] font-medium tracking-[0.24em] text-white/40">
+              <span className="font-mono text-[clamp(0.9rem,1.6vw,1.15rem)] font-medium tracking-[0.24em] text-white/60">
                 / {String(total).padStart(2, '0')}
               </span>
             </p>
@@ -111,12 +115,12 @@ const ResultPanel = forwardRef<
             >
               {headline}
             </p>
-            <p data-warp="tagline" className="mt-3 max-w-[54ch] text-[0.9rem] leading-[1.6] text-white/55">
+            <p data-warp="tagline" className="mt-3 max-w-[54ch] text-[0.9rem] leading-[1.6] text-white/70">
               {detail}
             </p>
             {/* Said plainly rather than left to be noticed. Someone who expects a
                 review screen should be told there is not one, and why. */}
-            <p data-warp="meta" className="mt-4 max-w-[54ch] text-[0.75rem] leading-[1.6] text-white/35">
+            <p data-warp="meta" className="mt-4 max-w-[54ch] text-[0.75rem] leading-[1.6] text-white/55">
               Answers are not shown while the rounds are open. Ties are broken by total
               answering time, so the seconds below count.
             </p>

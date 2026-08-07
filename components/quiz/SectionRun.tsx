@@ -178,7 +178,7 @@ export default function SectionRun({
             // The gap between the last lock and the readout. Short, but a black
             // screen with no word on it reads as a crash.
             <div className="flex h-full items-center justify-center">
-              <p className="font-mono text-[0.7rem] uppercase tracking-[0.3em] text-white/35">
+              <p className="font-mono text-[0.7rem] uppercase tracking-[0.3em] text-white/55">
                 {error ?? 'Compiling your score…'}
               </p>
             </div>

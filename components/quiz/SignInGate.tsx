@@ -100,7 +100,7 @@ export default function SignInGate({
         style={{ background: 'radial-gradient(135% 105% at 50% 45%, transparent 52%, #00000059)' }}
       />
 
-      <div className="quiz-scroll relative z-10 flex h-full flex-col overflow-y-auto px-[clamp(1.5rem,6vw,7rem)] pb-[clamp(1.75rem,6vh,4rem)] pt-[clamp(5.5rem,13vh,8.5rem)]">
+      <div className="quiz-scroll relative z-10 flex h-full flex-col overflow-y-auto px-[clamp(1.5rem,6vw,7rem)] pb-[clamp(1.75rem,6vh,4rem)] pt-[var(--quiz-pad-top)]">
         <header className="shrink-0">
           <div className="flex items-baseline justify-between gap-6">
             <span
@@ -110,7 +110,7 @@ export default function SignInGate({
             >
               Pre-flight
             </span>
-            <span data-warp="eyebrow" className="font-mono text-[0.7rem] tracking-[0.3em] text-white/40 md:text-xs">
+            <span data-warp="eyebrow" className="font-mono text-[0.7rem] tracking-[0.3em] text-white/60 md:text-xs">
               Sign in
             </span>
           </div>
@@ -137,7 +137,7 @@ export default function SignInGate({
             </p>
 
             {event && event.status !== 'running' && (
-              <p data-warp="tagline" className="mt-4 max-w-[54ch] text-[0.875rem] leading-[1.6] text-white/60">
+              <p data-warp="tagline" className="mt-4 max-w-[54ch] text-[0.875rem] leading-[1.6] text-white/70">
                 {event.status === 'stopped'
                   ? 'The quiz has ended. You can still sign in to see your own sections.'
                   : 'The quiz has not started yet — sign in now and you are registered. Your rounds open the moment the organisers start, with no refresh needed.'}
@@ -192,7 +192,7 @@ export default function SignInGate({
                 )}
               </div>
 
-              <p data-warp="meta" className="mt-2 max-w-[58ch] text-[0.75rem] leading-[1.6] text-white/40">
+              <p data-warp="meta" className="mt-2 max-w-[58ch] text-[0.75rem] leading-[1.6] text-white/60">
                 {domain
                   ? `Only @${domain} accounts can play, and each account gets one attempt at each section. `
                   : 'Any Google account can play, and each account gets one attempt at each section. '}

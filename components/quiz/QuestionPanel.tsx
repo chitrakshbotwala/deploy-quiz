@@ -119,7 +119,7 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
           style={{ background: 'radial-gradient(135% 105% at 50% 45%, transparent 52%, #00000059)' }}
         />
 
-        <div className="quiz-scroll relative z-10 flex h-full flex-col overflow-y-auto px-[clamp(1.5rem,6vw,7rem)] pb-[clamp(1.75rem,6vh,4rem)] pt-[clamp(5.5rem,13vh,8.5rem)]">
+        <div className="quiz-scroll relative z-10 flex h-full flex-col overflow-y-auto px-[clamp(1.5rem,6vw,7rem)] pb-[clamp(1.75rem,6vh,4rem)] pt-[var(--quiz-pad-top)]">
           {/* ── Masthead: anchor one ─────────────────────────────────────── */}
           <header className="shrink-0">
             <div className="flex items-baseline justify-between gap-6">
@@ -132,7 +132,7 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
               </span>
               <span
                 data-warp="eyebrow"
-                className="font-mono text-[0.7rem] tracking-[0.3em] text-white/40 md:text-xs"
+                className="font-mono text-[0.7rem] tracking-[0.3em] text-white/60 md:text-xs"
               >
                 {num} / {String(total).padStart(2, '0')}
               </span>
@@ -212,7 +212,7 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
                 ))}
               </div>
 
-              <p className="mt-3 font-mono text-[0.625rem] uppercase tracking-[0.3em] text-white/35">
+              <p className="mt-3 font-mono text-[0.625rem] uppercase tracking-[0.3em] text-white/55">
                 {retrying
                   ? 'Reconnecting…'
                   : locking
@@ -246,7 +246,7 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
                       {error}
                     </p>
                   ) : (
-                    <p className="max-w-[62ch] text-[0.75rem] leading-[1.6] text-white/40">
+                    <p className="max-w-[62ch] text-[0.75rem] leading-[1.6] text-white/60">
                       {selected === null
                         ? 'Pick an option. It is not locked until you continue — or until the clock runs out.'
                         : 'Held. Change it or lock it in; the clock does not stop either way.'}
