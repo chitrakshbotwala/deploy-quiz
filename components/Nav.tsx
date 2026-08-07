@@ -1,4 +1,4 @@
-import { quickLinks, registerUrl, homeUrl } from '@/content/links';
+import { quickLinks, homeUrl } from '@/content/links';
 import { BASE_PATH } from '@/lib/basePath';
 
 /**
@@ -68,14 +68,6 @@ export default function Nav() {
             );
           })}
         </div>
-        <a
-          href={registerUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-full border border-scan-pink/70 px-5 py-2 font-mono text-sm text-scan-pink transition-colors hover:bg-scan-pink hover:text-space focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-        >
-          Register
-        </a>
       </nav>
     </header>
   );
