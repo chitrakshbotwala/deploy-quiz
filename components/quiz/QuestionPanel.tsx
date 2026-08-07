@@ -31,6 +31,17 @@ export interface QuestionPanelProps {
   total: number;
   answered: boolean;
   picked: number | null;
+  /**
+   * The correct option and its explanation, handed over by the server once the
+   * pick has been recorded. Null until then — the browser is never told the
+   * answer to a question it has not yet committed to.
+   */
+  answer: number | null;
+  note: string | null;
+  /** A pick is in the air. Rows are locked but not yet resolved. */
+  pending: boolean;
+  /** The pick could not be recorded. Shown in place of the outcome. */
+  error: string | null;
   score: number;
   streak: number;
   startedAt: number;
@@ -44,11 +55,13 @@ export interface QuestionPanelProps {
 /** Per-row state, which is what the CSS strikes / starves / reveals / mutes. */
 function rowState(
   optionIndex: number,
-  answer: number,
+  answer: number | null,
   picked: number | null,
   answered: boolean
 ): 'correct' | 'wrong' | 'reveal' | 'muted' | undefined {
-  if (!answered) return undefined;
+  // `answer` is null for the whole armed phase, and stays null if the round-trip
+  // failed. Either way there is no verdict to draw yet.
+  if (!answered || answer === null) return undefined;
   if (optionIndex === picked) return picked === answer ? 'correct' : 'wrong';
   if (optionIndex === answer) return 'reveal';
   return 'muted';
@@ -62,6 +75,10 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
       total,
       answered,
       picked,
+      answer,
+      note,
+      pending,
+      error,
       score,
       streak,
       startedAt,
@@ -74,7 +91,7 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
     ref
   ) => {
     const num = String(index + 1).padStart(2, '0');
-    const correct = answered && picked === question.answer;
+    const correct = answered && answer !== null && picked === answer;
     const accent = question.accent;
 
     return (
@@ -171,24 +188,30 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
                     key={option}
                     type="button"
                     data-warp="option"
-                    data-state={rowState(i, question.answer, picked, answered)}
-                    disabled={answered}
+                    data-state={rowState(i, answer, picked, answered)}
+                    disabled={answered || pending}
                     onClick={() => onPick(i)}
+                    /* The picked row dims while its verdict is in flight. Without
+                       it the row sits fully lit and unresponsive, which reads as
+                       a dropped click rather than a pending one. */
+                    aria-busy={pending && i === picked}
                     /* Only while the row is armed. Once a pick lands, the
                        state rules in the stylesheet own `--lit` (signal green or
                        signal red), and an inline custom property would outrank
                        them and leave a "correct" row glowing in the question's
                        own accent. */
                     style={answered ? undefined : { ['--lit' as string]: accent }}
-                    className="quiz-answer group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white disabled:cursor-default"
+                    className={`quiz-answer group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white disabled:cursor-default ${
+                      pending && i === picked ? 'animate-pulse' : ''
+                    } ${pending && i !== picked ? 'opacity-45' : ''}`}
                   >
                     <span className="quiz-key" aria-hidden="true">
                       {KEYS[i]}
                     </span>
                     <span className="quiz-label text-[0.95rem] leading-snug md:text-lg">{option}</span>
-                    {answered && (i === picked || i === question.answer) ? (
+                    {answered && answer !== null && (i === picked || i === answer) ? (
                       <span className="quiz-mark" aria-hidden="true">
-                        {i === question.answer ? '✓' : '✕'}
+                        {i === answer ? '✓' : '✕'}
                       </span>
                     ) : null}
                   </button>
@@ -199,9 +222,14 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
                   for, so it is stated rather than left to be discovered. Hidden
                   once a pick lands: at that point the only live control is the
                   Next button, which already holds focus. */}
-              {!answered && (
+              {!answered && !pending && (
                 <p className="mt-3 font-mono text-[0.625rem] uppercase tracking-[0.3em] text-white/35">
                   Keys {KEYS.slice(0, question.options.length).join(' ')}
+                </p>
+              )}
+              {pending && (
+                <p className="mt-3 font-mono text-[0.625rem] uppercase tracking-[0.3em] text-white/35">
+                  Checking…
                 </p>
               )}
 
@@ -211,17 +239,28 @@ const QuestionPanel = forwardRef<HTMLDivElement, QuestionPanelProps>(
                   lands, which lands as a layout fault at the exact moment the
                   visitor is reading the result of their own click. */}
               <div className="mt-[clamp(1rem,2.5vh,1.75rem)] min-h-[7.5rem] md:min-h-[6.5rem]">
-                <div aria-live="polite" className={answered ? 'opacity-100' : 'opacity-0'}>
-                  {answered && (
+                <div aria-live="polite" className={answered || error ? 'opacity-100' : 'opacity-0'}>
+                  {/* The failure case is shown in the outcome's own slot rather
+                      than as a banner: the visitor's attention is already here,
+                      waiting on the verdict this replaces. */}
+                  {error && !answered && (
+                    <p
+                      className="max-w-[62ch] text-[0.875rem] leading-[1.6]"
+                      style={{ color: 'var(--color-signal-off)' }}
+                    >
+                      {error}
+                    </p>
+                  )}
+                  {answered && answer !== null && (
                     <>
                       <p
                         className="font-mono text-[0.7rem] uppercase tracking-[0.32em]"
                         style={{ color: correct ? 'var(--color-signal-ok)' : 'var(--color-signal-off)' }}
                       >
-                        {correct ? 'Correct' : `Not quite. ${KEYS[question.answer]} is the answer.`}
+                        {correct ? 'Correct' : `Not quite. ${KEYS[answer]} is the answer.`}
                       </p>
                       <p className="mt-2 max-w-[68ch] text-[0.875rem] leading-[1.6] text-white/65 md:text-[0.95rem]">
-                        {question.note}
+                        {note}
                       </p>
                     </>
                   )}

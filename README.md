@@ -1,16 +1,20 @@
 # Deploy or [REDACTED] — the quiz
 
-Ten questions, one at a time, scored in the tab. Next.js (App Router), no
-database and no API — the whole run is a state machine and two renderers.
+Ten questions, one run per person, scored on a server. Next.js (App Router) +
+Hono + Postgres, served at **gdgkiit.in/dor/quiz** from a VPS.
 
-The landing page is a separate deployment
+The landing page is a separate deployment and stays on Vercel
 ([SigniorAtif/deploy](https://github.com/SigniorAtif/deploy)); its `/quiz` link
-points here. This repo owns the quiz and nothing else.
+redirects here. This repo owns the quiz and nothing else.
 
-> The scored, signed-in version — Google sign-in, a Postgres-backed leaderboard,
-> one attempt per person — lives on the **`feat/quizbackend`** branch. This
-> branch is the frontend on its own: it keeps the answers in the bundle, which
-> is fine for a quiz nobody is ranked on and fatal for one that is.
+## Why it is its own thing
+
+The quiz used to be a second entry point in the landing page's Vite build. That
+worked for as long as the quiz was static. It stopped working the moment the
+answers had to leave the bundle: a scored leaderboard needs a database, a
+session cookie, and a process that stays up — none of which a static host
+provides, and none of which the landing page wants to grow a VPS for. So the two
+split along the line that already existed between them.
 
 ## Shape
 
@@ -18,42 +22,48 @@ points here. This repo owns the quiz and nothing else.
 app/
   layout.tsx                 fonts (self-hosted via next/font), metadata
   page.tsx                   the only route — renders the client shell
-components/quiz/             the run: question panel, readout
+  api/[[...route]]/route.ts  one catch-all, the Hono app mounted behind it
+components/quiz/             the run: gate, question panel, readout, board
   AsteroidField.tsx          the WebGL flight (desktop, motion allowed)
-content/quizQuestions.ts     every question, answer and note — the file to edit
-hooks/useQuiz.ts             the run state machine
+server/                      answer key, database, sessions, routes
+  answers.ts                 the whole reason there is a server
+  types.ts                   the API contract — imported by the client as types
+migrations/                  applied at boot, in filename order
 ```
 
-Two renderers, one engine. `hooks/useQuiz.ts` holds the run state and owns no
-DOM; `components/quiz/QuizApp.tsx` draws it as a WebGL asteroid field on desktop
-and as warp panels everywhere else, so both share the engine verbatim and differ
-only in how they draw the same run.
-
-Reduced motion gets the panels with no warp at all, which is the end state of
-both: the question is simply there.
+Two renderers, one engine. `hooks/useQuiz.ts` holds the run state machine and
+knows no answers; `components/quiz/QuizRun.tsx` draws it as a WebGL asteroid
+field on desktop and as warp panels everywhere else.
 
 ### The base path
 
-The app is mounted at `/dor/quiz`, not at a domain root, so Next's `basePath`
-and anything that builds a URL by hand have to agree about that. Both read
-`NEXT_PUBLIC_BASE_PATH` through `lib/basePath.ts`. It is a **build-time** value —
-changing it means rebuilding, not restarting.
+The app is mounted at `/dor/quiz`, not at a domain root, and three things have
+to agree about that: Next's `basePath` (asset URLs), the client's fetch prefix,
+and the run cookie's `path`. All three read `lib/basePath.ts`, which reads
+`NEXT_PUBLIC_BASE_PATH`. It is a **build-time** value — changing it means
+rebuilding, not restarting.
 
 ## Local development
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env.local     # fill in GOOGLE_CLIENT_ID and RUN_COOKIE_SECRET
 npm ci
+npm run db:up                  # Postgres on 127.0.0.1:5432
 npm run dev                    # http://localhost:3000/dor/quiz
 ```
 
+Migrations run themselves at boot. Sign-in needs a real OAuth client id with
+`http://localhost:3000` in its authorised JavaScript origins — there is
+deliberately no email fallback, so without one the gate has no way in.
+
 ## Editing questions
 
-Everything is in `content/quizQuestions.ts`: prompt, options, the correct index,
-the note shown after answering, and the `accent` that colours the panel, the
-point light on the asteroid you are parked at, and the warp streaks you fly
-through. Keep new accents inside the site's muted palette and clear of the two
-signal colours, or a correct/incorrect read becomes ambiguous.
+Question text, options and accent live in `content/quizQuestions.ts`, which is
+bundled and public. The correct option and its explanation live in
+`server/answers.ts`, which is not. Adding a question means editing **both**,
+keyed by the same `id` and in the same order — `assertKeyCoversQuestions()`
+refuses to start the server if they drift apart.
 
-The answers are in the bundle. Anyone who opens devtools can read them — which
-is exactly why the scored version moved them to a server.
+## Deploying
+
+See [deploy/README.md](deploy/README.md).

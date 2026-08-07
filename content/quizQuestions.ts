@@ -1,6 +1,12 @@
 // ─── EDIT ME ─────────────────────────────────────────────────────────────────
-// All quiz copy lives here. Nothing in the renderers needs touching to add,
+// Question copy lives here. Nothing in the renderers needs touching to add,
 // remove, or reword a question.
+//
+// The correct option and its explanation are NOT here — they live in
+// server/answers.ts and reach the browser only after a pick has been recorded.
+// This file is bundled and served to every visitor, so anything added to it is
+// public. Adding a question means editing BOTH files, keyed by the same `id`
+// and in the same order; the server refuses to boot if the two drift apart.
 //
 // `accent` drives more than the panel: it is also the colour of the point light
 // on the asteroid you are parked at and of the warp streaks you fly through, so
@@ -16,10 +22,6 @@ export interface QuizQuestion {
   /** The question itself. Rendered as display type, so keep it short. */
   prompt: string;
   options: string[];
-  /** Index into `options`. */
-  answer: number;
-  /** One line, shown after answering and again in the end-of-run review. */
-  note: string;
   accent: string;
 }
 
@@ -34,8 +36,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'Complexity',
     prompt: 'Binary search over a sorted array of n items runs in',
     options: ['O(1)', 'O(log n)', 'O(n)', 'O(n log n)'],
-    answer: 1,
-    note: 'Each comparison throws away half of what is left, so the work grows with the number of halvings.',
     accent: PINK
   },
   {
@@ -43,8 +43,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'HTTP',
     prompt: 'Signed in, still not allowed. Which status?',
     options: ['400 Bad Request', '401 Unauthorized', '403 Forbidden', '404 Not Found'],
-    answer: 2,
-    note: '401 means the server does not know who you are. 403 means it knows, and the answer is still no.',
     accent: PURPLE
   },
   {
@@ -52,8 +50,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'JavaScript',
     prompt: 'What does typeof null return?',
     options: ['"null"', '"object"', '"undefined"', 'It throws'],
-    answer: 1,
-    note: 'A tagging bug from 1995 that was never fixed, because fixing it would break the web.',
     accent: GOLD
   },
   {
@@ -61,8 +57,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'REST',
     prompt: 'Which method is not idempotent?',
     options: ['GET', 'PUT', 'DELETE', 'POST'],
-    answer: 3,
-    note: 'Send the same POST twice and you get two rows. PUT and DELETE land on the same end state every time.',
     accent: PERIWINKLE
   },
   {
@@ -70,8 +64,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'Git',
     prompt: 'You pushed a broken commit to main. Safest undo?',
     options: ['git revert', 'git reset --hard', 'git commit --amend', 'git rebase -i'],
-    answer: 0,
-    note: 'revert writes a new commit that undoes the old one. The other three rewrite history everyone already pulled.',
     accent: PINK
   },
   {
@@ -79,8 +71,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'Networking',
     prompt: 'Which one guarantees your packets arrive in order?',
     options: ['UDP', 'TCP', 'IP', 'ICMP'],
-    answer: 1,
-    note: 'TCP buys ordering and delivery with sequence numbers and retransmits. UDP trades both away for latency.',
     accent: PURPLE
   },
   {
@@ -88,8 +78,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'Floating point',
     prompt: 'In JavaScript, 0.1 + 0.2 === 0.3 evaluates to',
     options: ['true', 'false', 'NaN', 'Depends on the engine'],
-    answer: 1,
-    note: 'Neither 0.1 nor 0.2 is exact in binary64. The sum lands at 0.30000000000000004, and every IEEE 754 language agrees.',
     accent: GOLD
   },
   {
@@ -97,8 +85,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'DNS',
     prompt: 'Which record points one name at another name?',
     options: ['A', 'MX', 'CNAME', 'TXT'],
-    answer: 2,
-    note: 'A maps a name to an address. CNAME maps a name to a name, and the resolver then chases that one.',
     accent: PERIWINKLE
   },
   {
@@ -111,8 +97,6 @@ export const quizQuestions: QuizQuestion[] = [
       'Nothing, indexes are free',
       'Slower writes, less storage'
     ],
-    answer: 1,
-    note: 'The index is a second structure on disk, and every insert, update, and delete has to maintain it.',
     accent: PINK
   },
   {
@@ -120,8 +104,6 @@ export const quizQuestions: QuizQuestion[] = [
     topic: 'Space, and code',
     prompt: 'The Apollo 11 guidance computer flew with roughly',
     options: ['4 KB of RAM', '64 KB of RAM', '1 MB of RAM', '16 MB of RAM'],
-    answer: 0,
-    note: '2048 words of erasable memory, about 4 KB, and 36 KB of rope core. It landed two people on the Moon.',
     accent: PURPLE
   }
 ];

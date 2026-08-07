@@ -1,5 +1,7 @@
-import { forwardRef, useEffect, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useState } from 'react';
 import type { QuizQuestion } from '@/content/quizQuestions';
+import { formatSeconds } from '@/lib/quizApi';
+import type { FinishResponse } from '@/lib/quizApi';
 
 /**
  * End of run. Same frame as the question panels (masthead rule, telemetry rail),
@@ -9,6 +11,14 @@ import type { QuizQuestion } from '@/content/quizQuestions';
  * derivation as the footer wordmark. It is the loudest single glyph on the site
  * after the hero, and it earns that: it is the one number the whole run
  * produced.
+ *
+ * Every number on this panel comes out of `finish`, which the server computed
+ * from its own `picks` rows. The question list is still passed in, but only for
+ * prompt and option text — the correct answers and their notes arrive with the
+ * readout, because the client was never told them any earlier.
+ *
+ * There is no "run it again": one attempt per person is the rule, so the second
+ * action here is the board rather than a restart.
  */
 const VERDICTS: { min: number; line: string }[] = [
   { min: 1, line: 'Clean deploy. Nothing to roll back.' },
@@ -25,20 +35,20 @@ const ResultPanel = forwardRef<
   HTMLDivElement,
   {
     questions: QuizQuestion[];
-    answers: number[];
-    score: number;
-    bestStreak: number;
-    startedAt: number;
-    finishedAt: number;
-    onRestart: () => void;
+    /** The server's readout: score, time, rank and the full answer key for this run. */
+    finish: FinishResponse;
+    onLeaderboard: () => void;
     className?: string;
   }
->(({ questions, answers, score, bestStreak, startedAt, finishedAt, onRestart, className = '' }, ref) => {
-  const total = questions.length;
+>(({ questions, finish, onLeaderboard, className = '' }, ref) => {
+  const { score, total, bestStreak, seconds, rank, review } = finish;
   const ratio = total ? score / total : 0;
   const verdict = VERDICTS.find(v => ratio >= v.min)?.line ?? VERDICTS[VERDICTS.length - 1].line;
-  const seconds = Math.max(0, Math.round((finishedAt - startedAt) / 1000));
   const accent = ratio >= 0.7 ? 'var(--color-signal-ok)' : ratio >= 0.4 ? 'var(--color-scan-pink)' : 'var(--color-signal-off)';
+
+  // The log walks the question list for its copy and the review for its verdicts,
+  // so a question the run never reached simply has no entry and reads as unanswered.
+  const byId = useMemo(() => new Map(review.map(entry => [entry.qId, entry])), [review]);
 
   // The strike is a first-sight event, so it is armed one frame after mount
   // rather than baked into the initial render: a keyframed animation that is
@@ -101,19 +111,22 @@ const ResultPanel = forwardRef<
             >
               {verdict}
             </p>
+            <p data-warp="tagline" className="mt-3 font-mono text-[0.7rem] uppercase tracking-[0.32em] text-white/45">
+              Rank {String(rank).padStart(2, '0')} · {formatSeconds(seconds)}
+            </p>
             <div data-warp="cta" className="mt-7 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={onRestart}
+                onClick={onLeaderboard}
                 className="group inline-flex w-fit items-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-space transition-transform duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 style={{ backgroundColor: accent }}
               >
-                Run it again
+                See the leaderboard
                 <span
                   aria-hidden="true"
                   className="transition-transform duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] group-hover:translate-x-1"
                 >
-                  ↺
+                  →
                 </span>
               </button>
               <a
@@ -131,9 +144,11 @@ const ResultPanel = forwardRef<
           <div className="quiz-scroll min-h-0 flex-1 overflow-y-auto lg:max-h-full">
             <h3 className="font-mono text-[0.625rem] uppercase tracking-[0.3em] text-white/45">Answer log</h3>
             <ol className="mt-1">
-              {questions.map((q, i) => {
-                const given = answers[i];
-                const ok = given === q.answer;
+              {questions.map(q => {
+                const entry = byId.get(q.id);
+                const given = entry ? entry.choice : -1;
+                const key = entry ? entry.answer : -1;
+                const ok = entry?.correct ?? false;
                 return (
                   <li
                     key={q.id}
@@ -152,16 +167,25 @@ const ResultPanel = forwardRef<
                       <p className="mt-1 font-mono text-[0.7rem] tracking-[0.06em] text-white/45">
                         {ok ? (
                           <>
-                            {KEYS[q.answer]} · {q.options[q.answer]}
+                            {KEYS[key]} · {q.options[key]}
                           </>
                         ) : (
                           <>
-                            You: {given >= 0 ? `${KEYS[given]} · ${q.options[given]}` : 'no answer'} → {KEYS[q.answer]} ·{' '}
-                            {q.options[q.answer]}
+                            You: {given >= 0 ? `${KEYS[given]} · ${q.options[given]}` : 'no answer'}
+                            {key >= 0 ? (
+                              <>
+                                {' '}
+                                → {KEYS[key]} · {q.options[key]}
+                              </>
+                            ) : null}
                           </>
                         )}
                       </p>
-                      <p className="mt-1.5 max-w-[72ch] text-[0.8125rem] leading-[1.55] text-white/55">{q.note}</p>
+                      {entry && (
+                        <p className="mt-1.5 max-w-[72ch] text-[0.8125rem] leading-[1.55] text-white/55">
+                          {entry.note}
+                        </p>
+                      )}
                     </div>
                   </li>
                 );
@@ -176,7 +200,7 @@ const ResultPanel = forwardRef<
             {[
               { label: 'Accuracy', value: `${Math.round(ratio * 100)}%` },
               { label: 'Best streak', value: String(bestStreak).padStart(2, '0') },
-              { label: 'Total time', value: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` }
+              { label: 'Total time', value: formatSeconds(seconds) }
             ].map(row => (
               <div key={row.label} data-warp="meta">
                 <dt className="font-mono text-[0.625rem] uppercase tracking-[0.3em] text-white/55 md:text-[0.6875rem]">
