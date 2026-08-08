@@ -9,8 +9,11 @@ import { env } from './env';
  * would be, and it costs no network hop. It resets on deploy, which for a
  * one-evening event is acceptable.
  *
- * This guards signup only. The per-question routes are already bounded by the
- * database — a run can answer each question exactly once, forever.
+ * This guards the admin password gate, plus a per-uid burst ceiling on the run
+ * routes. Sign-in is deliberately unlimited — a hall on one campus wifi shares
+ * an address, so a per-IP count there throttles the room rather than an abuser.
+ * The per-question routes are already bounded by the database anyway: a run can
+ * answer each question exactly once, forever.
  */
 const windows = new Map<string, { count: number; resetAt: number }>();
 

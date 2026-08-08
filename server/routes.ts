@@ -105,11 +105,6 @@ api.get('/event', async c => c.json(await eventState()));
  * that classmate will ever get.
  */
 api.post('/auth/login', async c => {
-  const ip = clientIp(c);
-  if (!take(`login:${ip}`, 20, 10 * 60_000)) {
-    return fail(c, 429, 'rate-limited', 'Too many sign-ins from this address. Wait a few minutes.');
-  }
-
   const body = (await c.req.json().catch(() => null)) as { idToken?: unknown } | null;
   const idToken = typeof body?.idToken === 'string' ? body.idToken : '';
   if (!idToken) return fail(c, 400, 'invalid-body', 'Sign in with Google to start.');
