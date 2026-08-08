@@ -18,6 +18,18 @@ export const quickLinks: NavLink[] = [
   { label: 'Evidence', href: `${SITE_URL}/#evidence` }
 ];
 
+/**
+ * The Asteroid Hunt campaign page. On the landing page it is a real route — its
+ * own document, not an anchor — so from here it is that origin plus the path.
+ * Nothing in this deployment serves it.
+ *
+ * The spelling is deliberate: the built document is `astriodhunt/index.html`
+ * and that is the URL in the wild. The landing page redirects /asteroidhunt and
+ * /asteroid-hunt to it, so a corrected guess still lands, but linking at the
+ * real path saves the hop.
+ */
+export const asteroidHuntUrl: string = `${SITE_URL}/astriodhunt`;
+
 /** External registration link used by the nav's CTA. */
 export const registerUrl: string =
   process.env.NEXT_PUBLIC_REGISTER_URL ?? 'https://gdg.community.dev/gdg-on-campus-kiit/';

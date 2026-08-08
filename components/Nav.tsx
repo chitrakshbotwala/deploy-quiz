@@ -1,4 +1,4 @@
-import { quickLinks, homeUrl } from '@/content/links';
+import { quickLinks, asteroidHuntUrl, homeUrl } from '@/content/links';
 import { BASE_PATH } from '@/lib/basePath';
 
 /**
@@ -11,7 +11,15 @@ import { BASE_PATH } from '@/lib/basePath';
  * already on, so it is marked `aria-current` and links nowhere.
  */
 export default function Nav() {
-  const links = [...quickLinks, { label: 'Quiz', href: BASE_PATH || '/' }];
+  // Same order as the landing page's bar, so the numbering matches on both
+  // sides of the origin hop: the quick links, then the Asteroid Hunt, then the
+  // Quiz last. The Hunt is appended here rather than added to `quickLinks`
+  // because that list is anchors-into-the-landing-page and this is a page.
+  const links = [
+    ...quickLinks,
+    { label: 'Asteroid Hunt', href: asteroidHuntUrl },
+    { label: 'Quiz', href: BASE_PATH || '/' }
+  ];
 
   return (
     <header id="site-nav" className="fixed inset-x-0 top-0 z-50">
@@ -48,7 +56,10 @@ export default function Nav() {
             className="h-6 w-auto md:h-7"
           />
         </a>
-        <div className="hidden items-center gap-9 md:flex">
+        {/* Tightened at md and only opened back up at lg — the same step the
+            landing page's bar takes, and for the same reason: six entries at
+            gap-9 crowd the mark at 768px. */}
+        <div className="hidden items-center gap-7 md:flex lg:gap-9">
           {links.map((link, i) => {
             const isCurrent = link.label === 'Quiz';
             return (
