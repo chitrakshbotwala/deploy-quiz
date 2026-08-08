@@ -71,6 +71,13 @@ export default function SignInGate({
           setPopupError('Your browser blocked the sign-in window. Allow pop-ups for this page and try again.');
         } else if (code === 'auth/unauthorized-domain') {
           setPopupError('This domain is not authorised in the Firebase project. Tell the organisers.');
+        } else if (code === 'auth/too-many-requests') {
+          // Google's own per-IP throttle, not ours — a hall on one wifi shares
+          // an address, so it can trip on volume alone with nobody misbehaving.
+          // Named plainly so the room stops debugging its own connection.
+          setPopupError('Google is rate-limiting sign-ins from this network. Wait a minute, or switch to mobile data.');
+        } else if (code === 'auth/network-request-failed') {
+          setPopupError('Could not reach Google. Check your connection and try again.');
         } else {
           setPopupError('Google sign-in did not complete. Check your connection and try again.');
         }

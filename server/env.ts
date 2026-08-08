@@ -120,8 +120,8 @@ export const env = {
    * event's own decision and not an oversight. What it costs is worth writing
    * down: attempts are one per account, and Google accounts are free and
    * unlimited, so a determined participant can have as many attempts as they are
-   * willing to make addresses for. The defences that remain are the per-IP
-   * sign-in limit and the fact that each new account starts from zero with the
+   * willing to make addresses for. Sign-in is not rate limited either, so the
+   * only defence that remains is that each new account starts from zero with the
    * same ten-second clock — nothing carries over. Set this to a comma-separated
    * domain list to get the old guarantee back.
    */
